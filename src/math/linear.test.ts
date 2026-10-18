@@ -1,0 +1,2 @@
+import{describe,expect,it}from'vitest';import{determinant,inverse,rank,solveLinear}from'./linear'
+describe('lineáris algebra',()=>{it('determinánst számol',()=>expect(determinant([[1,2],[3,4]])).toBeCloseTo(-2));it('inverz mátrixot számol',()=>{const m=inverse([[1,2],[3,4]]);expect(m[0][0]).toBeCloseTo(-2);expect(m[1][0]).toBeCloseTo(1.5)});it('rangot számol',()=>expect(rank([[1,2],[2,4]])).toBe(1));it('megold lineáris rendszert',()=>expect(solveLinear([[2,1],[1,-1]],[5,1])).toEqual([2,1]))})

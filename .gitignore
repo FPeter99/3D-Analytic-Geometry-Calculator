@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Production build
+dist/
+
+# Cache & build info
+*.tsbuildinfo
+.DS_Store
+
+# Local preview screenshots (hosted on orphan assets branch to keep clone size minimal)
+tg*.png
+*.png
+*.jpg
+*.jpeg

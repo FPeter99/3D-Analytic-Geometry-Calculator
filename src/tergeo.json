@@ -1,0 +1,123 @@
+{
+  "version": 2,
+  "objects": [
+    {
+      "id": "56c4rgq",
+      "name": "T1",
+      "kind": "triangle",
+      "visible": true,
+      "color": "#7ae60f",
+      "data": {
+        "a": [
+          -6,
+          -3,
+          2
+        ],
+        "b": [
+          7,
+          0,
+          0
+        ],
+        "c": [
+          1,
+          4,
+          -2
+        ],
+        "showMedians": false,
+        "showAltitudes": false,
+        "showBisectors": false,
+        "showEuler": true,
+        "showCircles": true,
+        "showPlane": false,
+        "showAngleBisectors": false
+      }
+    },
+    {
+      "id": "ffno7ot",
+      "name": "e1",
+      "kind": "line",
+      "visible": true,
+      "color": "#ff6161",
+      "data": {
+        "p": [
+          7,
+          0,
+          0
+        ],
+        "v": [
+          -6,
+          4,
+          -2
+        ]
+      },
+      "mode": "direction"
+    },
+    {
+      "id": "7wmz69e",
+      "name": "T2",
+      "kind": "triangle",
+      "visible": true,
+      "color": "#56c7a5",
+      "data": {
+        "a": [
+          -14,
+          10,
+          0
+        ],
+        "b": [
+          -9,
+          9,
+          -13
+        ],
+        "c": [
+          -7,
+          14,
+          0
+        ],
+        "showMedians": false,
+        "showAltitudes": false,
+        "showBisectors": false,
+        "showEuler": false,
+        "showCircles": false,
+        "showPlane": false
+      }
+    },
+    {
+      "id": "e5iy7d2",
+      "name": "G1",
+      "kind": "sphere",
+      "visible": true,
+      "color": "#ff8b65",
+      "data": {
+        "center": [
+          11,
+          2,
+          -11
+        ],
+        "radius": 3,
+        "opacity": 0.69
+      }
+    },
+    {
+      "id": "cxup8dq",
+      "name": "S1",
+      "kind": "plane",
+      "visible": true,
+      "color": "#cf87ef",
+      "data": {
+        "p": [
+          18,
+          -12,
+          0
+        ],
+        "n": [
+          7,
+          3,
+          0
+        ],
+        "d": 90
+      },
+      "mode": "normal"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+import{describe,expect,it}from'vitest';import{differentiate,evaluateExpression,integrate}from'./symbolic'
+describe('szimbolikus és numerikus kalkulus',()=>{it('derivál polinomot',()=>expect(evaluateExpression(differentiate('x^3 + 2*x'),'x',2)).toBe(14));it('numerikusan integrál',()=>expect(integrate('x^2','x',0,1)).toBeCloseTo(1/3,6));it('nem támogatott kifejezést elutasít',()=>expect(()=>differentiate('sin(x)')).toThrow())})
