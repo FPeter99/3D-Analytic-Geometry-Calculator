@@ -9,7 +9,6 @@ export interface AppSettings {
   lineSpan: number;
   planeSpan: number;
   gridSize: number;
-  showFpsCounter: boolean;
   pointScale: number;
   flySpeed: number;
   fov: number;
@@ -21,7 +20,6 @@ export const defaultSettings: AppSettings = {
   lineSpan: 150,
   planeSpan: 60,
   gridSize: 50,
-  showFpsCounter: false,
   pointScale: 1.0,
   flySpeed: 12,
   fov: 48,
@@ -401,36 +399,6 @@ export function SettingsModal({
                     </button>
                   ))}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 3: Performance & FPS */}
-          <div className="settings-section">
-            <h4>
-              <Cpu size={14} />
-              {copy('Performance & Display', 'Teljesítmény & Megjelenítés', lang)}
-            </h4>
-
-            {/* Show FPS Counter */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Show Live FPS Counter', 'Élő FPS számláló megjelenítése', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Display real-time rendering framerate in the viewport', 'Valós idejű képkockasebesség kijelzése a 3D nézetben', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={settings.showFpsCounter}
-                    onChange={(e) => update('showFpsCounter', e.target.checked)}
-                  />
-                  <span className="toggle-slider" />
-                </label>
               </div>
             </div>
           </div>

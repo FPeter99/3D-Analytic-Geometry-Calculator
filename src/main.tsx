@@ -419,7 +419,6 @@ function App() {
     [formDirVec, setFormDirVec] = useState<Vec3>([1, 0, 0]),
     [formNormalVec, setFormNormalVec] = useState<Vec3>([0, 1, 0]),
     [settingsOpen, setSettingsOpen] = useState(false),
-    [fpsDisplay, setFpsDisplay] = useState(60),
     [settings, setSettings] = useState<AppSettings>(() => {
       try {
         const saved = localStorage.getItem("tergeo-settings");
@@ -1963,15 +1962,23 @@ function App() {
       const n = new THREE.Vector3(...v);
       if (n.length() < 1e-9) return;
       const u = n.normalize(),
-        span = settings.lineSpan,
+        span = Math.max(settings.lineSpan, 500000),
+        pVec = new THREE.Vector3(...p),
+        geo = new THREE.BufferGeometry().setFromPoints([
+          pVec.clone().addScaledVector(u, -span),
+          pVec.clone().addScaledVector(u, span),
+        ]),
         l = new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(...p).addScaledVector(u, -span),
-            new THREE.Vector3(...p).addScaledVector(u, span),
-          ]),
+          geo,
           new THREE.LineBasicMaterial({ color, depthTest: true }),
         );
-      l.userData = { id, role };
+      l.userData = {
+        id,
+        role,
+        isInfiniteLine: true,
+        baseP: pVec,
+        dir: u,
+      };
       group.add(l);
     };
     const addPoint = (
@@ -2084,7 +2091,7 @@ function App() {
           u = new THREE.Vector3().crossVectors(N, ref).normalize(),
           v = new THREE.Vector3().crossVectors(N, u).normalize(),
           p = new THREE.Vector3(...vec(d.p || G.scale(n, d.d / G.dot(n, n)))),
-          s = settings.planeSpan,
+          s = Math.max(settings.planeSpan, 500000),
           verts = [
             p.clone().addScaledVector(u, -s).addScaledVector(v, -s),
             p.clone().addScaledVector(u, s).addScaledVector(v, -s),
@@ -2121,14 +2128,30 @@ function App() {
             polygonOffsetUnits: 1,
           }),
         );
-        mesh.userData = { id: o.id, role: "plane" };
+        mesh.userData = {
+          id: o.id,
+          role: "plane",
+          isInfinitePlane: true,
+          baseP: p.clone(),
+          normal: N.clone(),
+          u: u.clone(),
+          v: v.clone(),
+        };
         mesh.renderOrder = 1;
         group.add(mesh);
         const edge = new THREE.LineLoop(
           new THREE.BufferGeometry().setFromPoints([...verts, verts[0]]),
           new THREE.LineBasicMaterial({ color: c }),
         );
-        edge.userData = { id: o.id, role: "plane" };
+        edge.userData = {
+          id: o.id,
+          role: "plane",
+          isInfinitePlaneEdge: true,
+          baseP: p.clone(),
+          normal: N.clone(),
+          u: u.clone(),
+          v: v.clone(),
+        };
         group.add(edge);
         addPoint(p.toArray() as Vec3, c, o.id, "planePoint");
         group.add(new THREE.ArrowHelper(N, p, 2.5, 0xf4b942, 0.35, 0.2));
@@ -2326,7 +2349,7 @@ function App() {
               u = new THREE.Vector3().crossVectors(N, ref).normalize(),
               v = new THREE.Vector3().crossVectors(N, u).normalize(),
               center = new THREE.Vector3(...verts[0]),
-              s = settings.planeSpan,
+              s = Math.max(settings.planeSpan, 500000),
               vs = [
                 center.clone().addScaledVector(u, -s).addScaledVector(v, -s),
                 center.clone().addScaledVector(u, s).addScaledVector(v, -s),
@@ -2359,6 +2382,15 @@ function App() {
                 depthWrite: false,
               }),
             );
+            m.userData = {
+              id: o.id,
+              role: "trianglePlane",
+              isInfinitePlane: true,
+              baseP: center.clone(),
+              normal: N.clone(),
+              u: u.clone(),
+              v: v.clone(),
+            };
             m.renderOrder = 0;
             group.add(m);
           }
@@ -2422,8 +2454,6 @@ function App() {
     fitSize();
     let lastRenderTime = performance.now();
     let accumulatedTime = 0;
-    let lastFpsUpdate = performance.now();
-    let frameCount = 0;
     const targetInterval = 1000 / 60;
     const tolerance = 1.8;
     const render = () => {
@@ -2444,13 +2474,6 @@ function App() {
 
       const dt = Math.min((now - previousFrame) / 1000, 0.05);
       previousFrame = now;
-      frameCount++;
-      const timeSinceLastFps = now - lastFpsUpdate;
-      if (timeSinceLastFps >= 500) {
-        setFpsDisplay(Math.round((frameCount * 1000) / timeSinceLastFps));
-        frameCount = 0;
-        lastFpsUpdate = now;
-      }
       const keys = heldKeys;
       if (keys.size) {
         const forward = new THREE.Vector3();
@@ -2482,6 +2505,70 @@ function App() {
         if (keys.has("arrowdown")) rotateCameraInPlace(0, -rotSpeed);
       }
       controls.update();
+
+      // Dynamic infinite geometry: reposition lines & planes around camera
+      const camPos = camera.position;
+      const camDist = camPos.length();
+      const dynSpan = Math.max(500000, camDist * 3);
+      camera.far = Math.max(settings.renderDistance, dynSpan * 2.5);
+      camera.updateProjectionMatrix();
+      group.traverse((child: any) => {
+        if (child.userData?.isInfiniteLine && child.geometry) {
+          const bp = child.userData.baseP as THREE.Vector3;
+          const dir = child.userData.dir as THREE.Vector3;
+          const t = camPos.clone().sub(bp).dot(dir);
+          const center = bp.clone().addScaledVector(dir, t);
+          const pos = child.geometry.attributes.position;
+          const a = center.clone().addScaledVector(dir, -dynSpan);
+          const b = center.clone().addScaledVector(dir, dynSpan);
+          pos.setXYZ(0, a.x, a.y, a.z);
+          pos.setXYZ(1, b.x, b.y, b.z);
+          pos.needsUpdate = true;
+          child.geometry.computeBoundingSphere();
+        }
+        if (child.userData?.isInfinitePlane && child.geometry) {
+          const bp = child.userData.baseP as THREE.Vector3;
+          const N = child.userData.normal as THREE.Vector3;
+          const U = child.userData.u as THREE.Vector3;
+          const V = child.userData.v as THREE.Vector3;
+          const dist = camPos.clone().sub(bp).dot(N);
+          const center = camPos.clone().addScaledVector(N, -dist);
+          const pos = child.geometry.attributes.position;
+          const c0 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, -dynSpan);
+          const c1 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, -dynSpan);
+          const c2 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, dynSpan);
+          const c3 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, dynSpan);
+          pos.setXYZ(0, c0.x, c0.y, c0.z);
+          pos.setXYZ(1, c1.x, c1.y, c1.z);
+          pos.setXYZ(2, c2.x, c2.y, c2.z);
+          pos.setXYZ(3, c0.x, c0.y, c0.z);
+          pos.setXYZ(4, c2.x, c2.y, c2.z);
+          pos.setXYZ(5, c3.x, c3.y, c3.z);
+          pos.needsUpdate = true;
+          child.geometry.computeBoundingSphere();
+        }
+        if (child.userData?.isInfinitePlaneEdge && child.geometry) {
+          const bp = child.userData.baseP as THREE.Vector3;
+          const N = child.userData.normal as THREE.Vector3;
+          const U = child.userData.u as THREE.Vector3;
+          const V = child.userData.v as THREE.Vector3;
+          const dist = camPos.clone().sub(bp).dot(N);
+          const center = camPos.clone().addScaledVector(N, -dist);
+          const pos = child.geometry.attributes.position;
+          const c0 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, -dynSpan);
+          const c1 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, -dynSpan);
+          const c2 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, dynSpan);
+          const c3 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, dynSpan);
+          pos.setXYZ(0, c0.x, c0.y, c0.z);
+          pos.setXYZ(1, c1.x, c1.y, c1.z);
+          pos.setXYZ(2, c2.x, c2.y, c2.z);
+          pos.setXYZ(3, c3.x, c3.y, c3.z);
+          pos.setXYZ(4, c0.x, c0.y, c0.z);
+          pos.needsUpdate = true;
+          child.geometry.computeBoundingSphere();
+        }
+      });
+
       if (selectedPoints.length > 0) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 0.014);
         group.traverse((child: any) => {
@@ -2844,11 +2931,6 @@ function App() {
         </div>
       </header>
       <div className="workspace">
-        {settings.showFpsCounter && (
-          <div className="fps-hud-badge">
-            {fpsDisplay} FPS
-          </div>
-        )}
         <aside className="sidebar">
           <div className="section-head">
             <span>{copy("3D GEOMETRY", "3D GEOMETRIA", language)}</span>
