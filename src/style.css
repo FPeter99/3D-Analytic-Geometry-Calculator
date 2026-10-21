@@ -98,19 +98,26 @@
 
 /* Settings Modal & HUD */
 .settings-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px}
-.settings-modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;width:100%;max-width:580px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,0.5);color:var(--text);overflow:hidden}
+.settings-modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,0.5);color:var(--text);overflow:hidden}
 .settings-modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--panel2)}
 .settings-modal-header h3{margin:0;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
 .settings-modal-body{padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:20px}
 .settings-section{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:14px}
 .settings-section h4{margin:0 0 12px 0;font-size:12px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:0.5px}
-.settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:16px}
+.settings-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:16px}
 .settings-row:last-child{border-bottom:none;padding-bottom:0}
 .settings-label-col{display:flex;flex-direction:column;gap:3px;flex:1}
 .settings-title{font-size:12.5px;font-weight:600;color:var(--text)}
 .settings-desc{font-size:11px;color:var(--muted);line-height:1.35}
-.settings-control-col{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:180px}
-.settings-control-col input[type="range"]{width:160px;cursor:pointer}
+.settings-control-col{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:220px}
+.settings-slider-row{display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-end}
+.settings-slider-row input[type="range"]{width:140px;cursor:pointer}
+.settings-num-input{width:75px;padding:3px 6px;font-family:'DM Mono',monospace;font-size:11.5px;background:var(--control);border:1px solid var(--border);color:var(--text);border-radius:4px;text-align:right}
+.settings-num-input:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+.settings-presets-row{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.settings-preset-btn{padding:2px 7px;font-size:10.5px;font-family:'DM Mono',monospace;border-radius:4px;border:1px solid var(--border);background:var(--control);color:var(--muted);cursor:pointer;transition:all .15s}
+.settings-preset-btn:hover{background:var(--hover);color:var(--accent);border-color:var(--accent)}
+.settings-preset-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .settings-value-badge{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--control);padding:2px 6px;border-radius:4px;border:1px solid var(--border)}
 .settings-modal-footer{padding:12px 20px;border-top:1px solid var(--border);background:var(--panel2);display:flex;justify-content:space-between;align-items:center}
 .toggle-switch{position:relative;display:inline-block;width:38px;height:22px}

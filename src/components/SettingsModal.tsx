@@ -17,15 +17,15 @@ export interface AppSettings {
 }
 
 export const defaultSettings: AppSettings = {
-  renderDistance: 1000,
+  renderDistance: 5000,
   precision: 3,
-  lineSpan: 45,
-  planeSpan: 28,
-  gridSize: 40,
+  lineSpan: 150,
+  planeSpan: 60,
+  gridSize: 50,
   fpsLimit: 0,
   showFpsCounter: false,
   pointScale: 1.0,
-  flySpeed: 9,
+  flySpeed: 12,
   fov: 48,
 };
 
@@ -90,17 +90,36 @@ export function SettingsModal({
                 </span>
               </div>
               <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="1"
-                  max="8"
-                  step="1"
-                  value={settings.precision}
-                  onChange={(e) => update('precision', parseInt(e.target.value, 10))}
-                />
-                <span className="settings-value-badge">
-                  {settings.precision} {copy('decimals', 'tizedesjegy', lang)} ({Number(1 / Math.pow(10, settings.precision)).toFixed(settings.precision)})
-                </span>
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="1"
+                    max="8"
+                    step="1"
+                    value={settings.precision}
+                    onChange={(e) => update('precision', parseInt(e.target.value, 10))}
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    className="settings-num-input"
+                    value={settings.precision}
+                    onChange={(e) => update('precision', Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))}
+                  />
+                </div>
+                <div className="settings-presets-row">
+                  {[2, 3, 4, 6].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`settings-preset-btn ${settings.precision === p ? 'active' : ''}`}
+                      onClick={() => update('precision', p)}
+                    >
+                      {p} {copy('dec', 'tizedes', lang)}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -109,54 +128,8 @@ export function SettingsModal({
           <div className="settings-section">
             <h4>
               <Eye size={14} />
-              {copy('Geometry Extent & Viewport', 'Geometria méret & Látótér', lang)}
+              {copy('Geometry Extent & Massive Viewport', 'Geometria méret & Hatalmas Látótér', lang)}
             </h4>
-
-            {/* Line Span */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Infinite Line Extent (Span)', 'Egyenesek kiterjesztése (hossz)', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Render length of parametric 3D infinite lines', 'A paraméteres egyenesek virtuális hossza a színtérben', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="15"
-                  max="150"
-                  step="5"
-                  value={settings.lineSpan}
-                  onChange={(e) => update('lineSpan', parseInt(e.target.value, 10))}
-                />
-                <span className="settings-value-badge">±{settings.lineSpan} {copy('units', 'egység', lang)}</span>
-              </div>
-            </div>
-
-            {/* Plane Span */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Plane Representation Size', 'Síkok vizuális mérete', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Dimension of supporting plane visual squares', 'A tartósíkok négyszögének vizuális fél-szélessége', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="10"
-                  max="80"
-                  step="2"
-                  value={settings.planeSpan}
-                  onChange={(e) => update('planeSpan', parseInt(e.target.value, 10))}
-                />
-                <span className="settings-value-badge">{settings.planeSpan * 2} × {settings.planeSpan * 2}</span>
-              </div>
-            </div>
 
             {/* Render Distance (Camera Far) */}
             <div className="settings-row">
@@ -165,19 +138,176 @@ export function SettingsModal({
                   {copy('Render Distance (Camera Far)', 'Render távolság (Látótávolság)', lang)}
                 </span>
                 <span className="settings-desc">
-                  {copy('Maximum visible depth of the 3D camera frustum', 'A 3D kamera maximális vágósíkja és látótávolsága', lang)}
+                  {copy('Maximum visible depth of the 3D camera frustum (up to 100,000+ units)', 'A 3D kamera maximális látótávolsága (akár 100 000+ egység)', lang)}
                 </span>
               </div>
               <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="200"
-                  max="3000"
-                  step="100"
-                  value={settings.renderDistance}
-                  onChange={(e) => update('renderDistance', parseInt(e.target.value, 10))}
-                />
-                <span className="settings-value-badge">{settings.renderDistance} {copy('units', 'egység', lang)}</span>
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="500"
+                    max="100000"
+                    step="500"
+                    value={Math.min(100000, settings.renderDistance)}
+                    onChange={(e) => update('renderDistance', parseInt(e.target.value, 10))}
+                  />
+                  <input
+                    type="number"
+                    min="200"
+                    max="500000"
+                    step="500"
+                    className="settings-num-input"
+                    value={settings.renderDistance}
+                    onChange={(e) => update('renderDistance', Math.max(200, parseInt(e.target.value, 10) || 500))}
+                  />
+                </div>
+                <div className="settings-presets-row">
+                  {[1000, 5000, 20000, 50000, 100000].map((dist) => (
+                    <button
+                      key={dist}
+                      type="button"
+                      className={`settings-preset-btn ${settings.renderDistance === dist ? 'active' : ''}`}
+                      onClick={() => update('renderDistance', dist)}
+                    >
+                      {dist >= 1000 ? `${dist / 1000}k` : dist}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Line Span */}
+            <div className="settings-row">
+              <div className="settings-label-col">
+                <span className="settings-title">
+                  {copy('Infinite Line Extent (Span)', 'Egyenesek kiterjesztése (hossz)', lang)}
+                </span>
+                <span className="settings-desc">
+                  {copy('Visual length of 3D parametric infinite lines (up to 50,000+ units)', 'A 3D egyenesek virtuális render hossza (akár 50 000+ egység)', lang)}
+                </span>
+              </div>
+              <div className="settings-control-col">
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="25"
+                    max="50000"
+                    step="25"
+                    value={Math.min(50000, settings.lineSpan)}
+                    onChange={(e) => update('lineSpan', parseInt(e.target.value, 10))}
+                  />
+                  <input
+                    type="number"
+                    min="10"
+                    max="200000"
+                    step="50"
+                    className="settings-num-input"
+                    value={settings.lineSpan}
+                    onChange={(e) => update('lineSpan', Math.max(10, parseInt(e.target.value, 10) || 50))}
+                  />
+                </div>
+                <div className="settings-presets-row">
+                  {[100, 500, 2500, 10000, 50000].map((span) => (
+                    <button
+                      key={span}
+                      type="button"
+                      className={`settings-preset-btn ${settings.lineSpan === span ? 'active' : ''}`}
+                      onClick={() => update('lineSpan', span)}
+                    >
+                      ±{span >= 1000 ? `${span / 1000}k` : span}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Plane Span */}
+            <div className="settings-row">
+              <div className="settings-label-col">
+                <span className="settings-title">
+                  {copy('Plane Representation Size (Span)', 'Síkok vizuális mérete (Kiterjedés)', lang)}
+                </span>
+                <span className="settings-desc">
+                  {copy('Dimension of supporting plane visual squares (up to 25,000+ half-width)', 'A tartósíkok négyszögének fél-szélessége (akár 25 000+)', lang)}
+                </span>
+              </div>
+              <div className="settings-control-col">
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="15"
+                    max="25000"
+                    step="25"
+                    value={Math.min(25000, settings.planeSpan)}
+                    onChange={(e) => update('planeSpan', parseInt(e.target.value, 10))}
+                  />
+                  <input
+                    type="number"
+                    min="10"
+                    max="100000"
+                    step="25"
+                    className="settings-num-input"
+                    value={settings.planeSpan}
+                    onChange={(e) => update('planeSpan', Math.max(10, parseInt(e.target.value, 10) || 50))}
+                  />
+                </div>
+                <div className="settings-presets-row">
+                  {[50, 250, 1000, 5000, 25000].map((pspan) => (
+                    <button
+                      key={pspan}
+                      type="button"
+                      className={`settings-preset-btn ${settings.planeSpan === pspan ? 'active' : ''}`}
+                      onClick={() => update('planeSpan', pspan)}
+                    >
+                      {pspan >= 1000 ? `${pspan / 1000}k` : pspan}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Coordinate Grid Size */}
+            <div className="settings-row">
+              <div className="settings-label-col">
+                <span className="settings-title">
+                  {copy('Coordinate Grid Extent', 'Koordinátarács mérete', lang)}
+                </span>
+                <span className="settings-desc">
+                  {copy('Dimension and subdivision of the reference ground plane grid', 'A vízszintes referenciasík rácsának teljes kiterjedése', lang)}
+                </span>
+              </div>
+              <div className="settings-control-col">
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="20"
+                    max="5000"
+                    step="20"
+                    value={Math.min(5000, settings.gridSize)}
+                    onChange={(e) => update('gridSize', parseInt(e.target.value, 10))}
+                  />
+                  <input
+                    type="number"
+                    min="20"
+                    max="50000"
+                    step="50"
+                    className="settings-num-input"
+                    value={settings.gridSize}
+                    onChange={(e) => update('gridSize', Math.max(20, parseInt(e.target.value, 10) || 40))}
+                  />
+                </div>
+                <div className="settings-presets-row">
+                  {[40, 100, 500, 2000, 5000].map((gs) => (
+                    <button
+                      key={gs}
+                      type="button"
+                      className={`settings-preset-btn ${settings.gridSize === gs ? 'active' : ''}`}
+                      onClick={() => update('gridSize', gs)}
+                    >
+                      {gs >= 1000 ? `${gs / 1000}k` : gs}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -192,15 +322,17 @@ export function SettingsModal({
                 </span>
               </div>
               <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="30"
-                  max="85"
-                  step="1"
-                  value={settings.fov}
-                  onChange={(e) => update('fov', parseInt(e.target.value, 10))}
-                />
-                <span className="settings-value-badge">{settings.fov}°</span>
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="30"
+                    max="90"
+                    step="1"
+                    value={settings.fov}
+                    onChange={(e) => update('fov', parseInt(e.target.value, 10))}
+                  />
+                  <span className="settings-value-badge">{settings.fov}°</span>
+                </div>
               </div>
             </div>
 
@@ -215,38 +347,17 @@ export function SettingsModal({
                 </span>
               </div>
               <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.5"
-                  step="0.1"
-                  value={settings.pointScale}
-                  onChange={(e) => update('pointScale', parseFloat(e.target.value))}
-                />
-                <span className="settings-value-badge">{settings.pointScale.toFixed(1)}×</span>
-              </div>
-            </div>
-
-            {/* Grid Size */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Coordinate Grid Extent', 'Koordinátarács mérete', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Dimension and subdivision of the reference ground plane grid', 'A vízszintes referenciasík rácsának teljes kiterjedése', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="20"
-                  max="120"
-                  step="10"
-                  value={settings.gridSize}
-                  onChange={(e) => update('gridSize', parseInt(e.target.value, 10))}
-                />
-                <span className="settings-value-badge">{settings.gridSize} × {settings.gridSize}</span>
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="3.0"
+                    step="0.1"
+                    value={settings.pointScale}
+                    onChange={(e) => update('pointScale', parseFloat(e.target.value))}
+                  />
+                  <span className="settings-value-badge">{settings.pointScale.toFixed(1)}×</span>
+                </div>
               </div>
             </div>
 
@@ -257,19 +368,41 @@ export function SettingsModal({
                   {copy('WASD Flight Movement Speed', 'WASD repülési sebesség', lang)}
                 </span>
                 <span className="settings-desc">
-                  {copy('Movement velocity during keyboard navigation', 'Kameramozgás sebessége billentyűzetes repüléskor', lang)}
+                  {copy('Movement velocity during keyboard navigation (useful for vast spaces)', 'Kameramozgás sebessége nagy terek bejárásakor', lang)}
                 </span>
               </div>
               <div className="settings-control-col">
-                <input
-                  type="range"
-                  min="3"
-                  max="25"
-                  step="1"
-                  value={settings.flySpeed}
-                  onChange={(e) => update('flySpeed', parseInt(e.target.value, 10))}
-                />
-                <span className="settings-value-badge">{settings.flySpeed} u/s</span>
+                <div className="settings-slider-row">
+                  <input
+                    type="range"
+                    min="5"
+                    max="200"
+                    step="5"
+                    value={settings.flySpeed}
+                    onChange={(e) => update('flySpeed', parseInt(e.target.value, 10))}
+                  />
+                  <input
+                    type="number"
+                    min="2"
+                    max="1000"
+                    step="5"
+                    className="settings-num-input"
+                    value={settings.flySpeed}
+                    onChange={(e) => update('flySpeed', Math.max(2, parseInt(e.target.value, 10) || 10))}
+                  />
+                </div>
+                <div className="settings-presets-row">
+                  {[9, 25, 60, 150].map((spd) => (
+                    <button
+                      key={spd}
+                      type="button"
+                      className={`settings-preset-btn ${settings.flySpeed === spd ? 'active' : ''}`}
+                      onClick={() => update('flySpeed', spd)}
+                    >
+                      {spd} u/s
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
