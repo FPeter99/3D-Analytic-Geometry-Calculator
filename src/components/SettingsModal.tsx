@@ -9,7 +9,6 @@ export interface AppSettings {
   lineSpan: number;
   planeSpan: number;
   gridSize: number;
-  fpsLimit: number;
   showFpsCounter: boolean;
   pointScale: number;
   flySpeed: number;
@@ -22,7 +21,6 @@ export const defaultSettings: AppSettings = {
   lineSpan: 150,
   planeSpan: 60,
   gridSize: 50,
-  fpsLimit: 0,
   showFpsCounter: false,
   pointScale: 1.0,
   flySpeed: 12,
@@ -411,42 +409,8 @@ export function SettingsModal({
           <div className="settings-section">
             <h4>
               <Cpu size={14} />
-              {copy('Performance & Framerate', 'Teljesítmény & Képkockasebesség', lang)}
+              {copy('Performance & Display', 'Teljesítmény & Megjelenítés', lang)}
             </h4>
-
-            {/* FPS Limit */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('FPS Limit', 'Képkocka korlát (FPS Limit)', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Cap the maximum rendering framerate to save battery or GPU power', 'Maximális renderelési frekvencia a fogyasztás csökkentésére', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {[
-                    { label: copy('Unlimited', 'Korlátlan', lang), val: 0 },
-                    { label: '30 FPS', val: 30 },
-                    { label: '60 FPS', val: 60 },
-                    { label: '120 FPS', val: 120 },
-                    { label: '144 FPS', val: 144 },
-                    { label: '240 FPS', val: 240 },
-                  ].map((item) => (
-                    <button
-                      key={item.val}
-                      type="button"
-                      className={`point-mode-btn ${settings.fpsLimit === item.val ? 'active' : ''}`}
-                      onClick={() => update('fpsLimit', item.val)}
-                      style={{ padding: '4px 10px', fontSize: 11 }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
 
             {/* Show FPS Counter */}
             <div className="settings-row">
@@ -455,7 +419,7 @@ export function SettingsModal({
                   {copy('Show Live FPS Counter', 'Élő FPS számláló megjelenítése', lang)}
                 </span>
                 <span className="settings-desc">
-                  {copy('Display real-time rendering statistics in the viewport', 'Valós idejű képkockasebesség kijelzése a 3D nézetben', lang)}
+                  {copy('Display real-time rendering framerate in the viewport', 'Valós idejű képkockasebesség kijelzése a 3D nézetben', lang)}
                 </span>
               </div>
               <div className="settings-control-col">

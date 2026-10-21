@@ -2424,25 +2424,21 @@ function App() {
     let accumulatedTime = 0;
     let lastFpsUpdate = performance.now();
     let frameCount = 0;
+    const targetInterval = 1000 / 60;
+    const tolerance = 1.8;
     const render = () => {
       raf = requestAnimationFrame(render);
       const now = performance.now();
       const delta = Math.min(now - lastRenderTime, 100);
       lastRenderTime = now;
 
-      if (settings.fpsLimit > 0) {
-        const targetInterval = 1000 / settings.fpsLimit;
-        // Natural display refresh (VSync) jitter tolerance (±1.5ms)
-        const tolerance = Math.min(1.8, targetInterval * 0.15);
-        accumulatedTime += delta;
-        if (accumulatedTime < targetInterval - tolerance) {
-          return;
-        }
-        accumulatedTime -= targetInterval;
-        if (accumulatedTime < -targetInterval || accumulatedTime > targetInterval) {
-          accumulatedTime = 0;
-        }
-      } else {
+      // Fixed 60 FPS pacing
+      accumulatedTime += delta;
+      if (accumulatedTime < targetInterval - tolerance) {
+        return;
+      }
+      accumulatedTime -= targetInterval;
+      if (accumulatedTime < -targetInterval || accumulatedTime > targetInterval) {
         accumulatedTime = 0;
       }
 
