@@ -2420,20 +2420,38 @@ function App() {
     const ro = new ResizeObserver(fitSize);
     ro.observe(host);
     fitSize();
+    let lastRenderTime = performance.now();
+    let accumulatedTime = 0;
     let lastFpsUpdate = performance.now();
     let frameCount = 0;
     const render = () => {
       raf = requestAnimationFrame(render);
       const now = performance.now();
+      const delta = Math.min(now - lastRenderTime, 100);
+      lastRenderTime = now;
+
       if (settings.fpsLimit > 0) {
-        const minFrameTime = 1000 / settings.fpsLimit;
-        if (now - previousFrame < minFrameTime) return;
+        const targetInterval = 1000 / settings.fpsLimit;
+        // Natural display refresh (VSync) jitter tolerance (±1.5ms)
+        const tolerance = Math.min(1.8, targetInterval * 0.15);
+        accumulatedTime += delta;
+        if (accumulatedTime < targetInterval - tolerance) {
+          return;
+        }
+        accumulatedTime -= targetInterval;
+        if (accumulatedTime < -targetInterval || accumulatedTime > targetInterval) {
+          accumulatedTime = 0;
+        }
+      } else {
+        accumulatedTime = 0;
       }
+
       const dt = Math.min((now - previousFrame) / 1000, 0.05);
       previousFrame = now;
       frameCount++;
-      if (now - lastFpsUpdate >= 500) {
-        setFpsDisplay(Math.round((frameCount * 1000) / (now - lastFpsUpdate)));
+      const timeSinceLastFps = now - lastFpsUpdate;
+      if (timeSinceLastFps >= 500) {
+        setFpsDisplay(Math.round((frameCount * 1000) / timeSinceLastFps));
         frameCount = 0;
         lastFpsUpdate = now;
       }
@@ -2832,7 +2850,7 @@ function App() {
       <div className="workspace">
         {settings.showFpsCounter && (
           <div className="fps-hud-badge">
-            {fpsDisplay} FPS {settings.fpsLimit > 0 ? `(max ${settings.fpsLimit})` : ""}
+            {fpsDisplay} FPS
           </div>
         )}
         <aside className="sidebar">

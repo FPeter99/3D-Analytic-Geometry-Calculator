@@ -431,6 +431,8 @@ export function SettingsModal({
                     { label: '30 FPS', val: 30 },
                     { label: '60 FPS', val: 60 },
                     { label: '120 FPS', val: 120 },
+                    { label: '144 FPS', val: 144 },
+                    { label: '240 FPS', val: 240 },
                   ].map((item) => (
                     <button
                       key={item.val}
