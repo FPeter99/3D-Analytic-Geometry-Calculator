@@ -27,6 +27,7 @@ import {
   SlidersHorizontal,
   Copy,
   Trash2,
+  Settings,
 } from "lucide-react";
 import * as G from "./math/geometry";
 import type { Line, Vec3 } from "./math/geometry";
@@ -38,6 +39,11 @@ import {
   type PointPickVal,
   type AvailablePointItem,
 } from "./components/PointInput";
+import {
+  SettingsModal,
+  type AppSettings,
+  defaultSettings,
+} from "./components/SettingsModal";
 import { calculate } from "./math/calculator";
 import tergeoPreset from "./tergeo.json";
 import "./style.css";
@@ -82,10 +88,11 @@ const copy = (en: string, hu: string, l: Language) => (l === "en" ? en : hu),
     circle: "#54d2e8",
   },
   vec = (a: any): Vec3 => [+a[0] || 0, +a[1] || 0, +a[2] || 0],
-  fmt = (n: number) => Number(n.toFixed(3)).toString(),
-  vecText = (v: Vec3) => `(${v.map(fmt).join(", ")})`,
+  fmt = (n: number, p = currentPrecision) => Number(n.toFixed(p)).toString(),
+  vecText = (v: Vec3, p = currentPrecision) => `(${v.map((n) => fmt(n, p)).join(", ")})`,
   mixColor = (a: string, b: string) =>
     `#${new THREE.Color(a).lerp(new THREE.Color(b), 0.5).getHexString()}`;
+let currentPrecision = 3;
 const defaultObjects: Obj[] = (tergeoPreset as any).objects || [];
 const seed: State = {
   selected: null,
@@ -410,7 +417,18 @@ function App() {
     ),
     [formRadius, setFormRadius] = useState<number>(2),
     [formDirVec, setFormDirVec] = useState<Vec3>([1, 0, 0]),
-    [formNormalVec, setFormNormalVec] = useState<Vec3>([0, 1, 0]);
+    [formNormalVec, setFormNormalVec] = useState<Vec3>([0, 1, 0]),
+    [settingsOpen, setSettingsOpen] = useState(false),
+    [fpsDisplay, setFpsDisplay] = useState(60),
+    [settings, setSettings] = useState<AppSettings>(() => {
+      try {
+        const saved = localStorage.getItem("tergeo-settings");
+        return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+      } catch {
+        return defaultSettings;
+      }
+    });
+  currentPrecision = settings.precision;
   const mountRef = useRef<HTMLDivElement>(null),
     engine = useRef<any>(null),
     cameraMemory = useRef({
@@ -715,6 +733,9 @@ function App() {
   useEffect(() => {
     localStorage.setItem("tergeo-language", language);
   }, [language]);
+  useEffect(() => {
+    localStorage.setItem("tergeo-settings", JSON.stringify(settings));
+  }, [settings]);
   const add = (
       kind: Kind,
       data: any,
@@ -1756,7 +1777,12 @@ function App() {
     scene.background = new THREE.Color(
       theme === "dark" ? "#11151d" : "#f3f5f8",
     );
-    const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(
+      settings.fov,
+      1,
+      0.1,
+      settings.renderDistance,
+    );
     camera.position.set(...cameraMemory.current.position);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -1881,8 +1907,8 @@ function App() {
     );
     controls.target.set(...cameraMemory.current.target);
     const grid = new THREE.GridHelper(
-      40,
-      40,
+      settings.gridSize,
+      settings.gridSize,
       theme === "dark" ? 0x526078 : 0x9aa7b7,
       theme === "dark" ? 0x283342 : 0xd6dce4,
     );
@@ -1934,10 +1960,11 @@ function App() {
       const n = new THREE.Vector3(...v);
       if (n.length() < 1e-9) return;
       const u = n.normalize(),
+        span = settings.lineSpan,
         l = new THREE.Line(
           new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(...p).addScaledVector(u, -45),
-            new THREE.Vector3(...p).addScaledVector(u, 45),
+            new THREE.Vector3(...p).addScaledVector(u, -span),
+            new THREE.Vector3(...p).addScaledVector(u, span),
           ]),
           new THREE.LineBasicMaterial({ color, depthTest: true }),
         );
@@ -1951,6 +1978,7 @@ function App() {
       role = "point",
       size = 0.11,
     ) => {
+      const effectiveSize = size * settings.pointScale;
       const pointKey = `${id}__${role}`;
       const isMultiSel = selectedPoints.some(
         (sp) => sp.key === pointKey || (role === "point" && sp.key === id),
@@ -1958,7 +1986,7 @@ function App() {
       const threeColor =
         color instanceof THREE.Color ? color : new THREE.Color(color);
       const m = new THREE.Mesh(
-        new THREE.SphereGeometry(size, 18, 14),
+        new THREE.SphereGeometry(effectiveSize, 18, 14),
         new THREE.MeshStandardMaterial({
           color: threeColor,
           emissive: threeColor,
@@ -1974,7 +2002,7 @@ function App() {
         isPointLike: true,
         isMultiSelected: isMultiSel,
         originalColor: threeColor.clone(),
-        baseScale: size / 0.11,
+        baseScale: effectiveSize / 0.11,
       };
       group.add(m);
     };
@@ -2053,7 +2081,7 @@ function App() {
           u = new THREE.Vector3().crossVectors(N, ref).normalize(),
           v = new THREE.Vector3().crossVectors(N, u).normalize(),
           p = new THREE.Vector3(...vec(d.p || G.scale(n, d.d / G.dot(n, n)))),
-          s = 28,
+          s = settings.planeSpan,
           verts = [
             p.clone().addScaledVector(u, -s).addScaledVector(v, -s),
             p.clone().addScaledVector(u, s).addScaledVector(v, -s),
@@ -2295,7 +2323,7 @@ function App() {
               u = new THREE.Vector3().crossVectors(N, ref).normalize(),
               v = new THREE.Vector3().crossVectors(N, u).normalize(),
               center = new THREE.Vector3(...verts[0]),
-              s = 25,
+              s = settings.planeSpan,
               vs = [
                 center.clone().addScaledVector(u, -s).addScaledVector(v, -s),
                 center.clone().addScaledVector(u, s).addScaledVector(v, -s),
@@ -2389,11 +2417,23 @@ function App() {
     const ro = new ResizeObserver(fitSize);
     ro.observe(host);
     fitSize();
+    let lastFpsUpdate = performance.now();
+    let frameCount = 0;
     const render = () => {
       raf = requestAnimationFrame(render);
-      const now = performance.now(),
-        dt = Math.min((now - previousFrame) / 1000, 0.05);
+      const now = performance.now();
+      if (settings.fpsLimit > 0) {
+        const minFrameTime = 1000 / settings.fpsLimit;
+        if (now - previousFrame < minFrameTime) return;
+      }
+      const dt = Math.min((now - previousFrame) / 1000, 0.05);
       previousFrame = now;
+      frameCount++;
+      if (now - lastFpsUpdate >= 500) {
+        setFpsDisplay(Math.round((frameCount * 1000) / (now - lastFpsUpdate)));
+        frameCount = 0;
+        lastFpsUpdate = now;
+      }
       const keys = heldKeys;
       if (keys.size) {
         const forward = new THREE.Vector3();
@@ -2410,7 +2450,7 @@ function App() {
         if (keys.has(" ")) velocity.add(up);
         if (keys.has("shift")) velocity.sub(up);
         if (velocity.lengthSq()) {
-          velocity.normalize().multiplyScalar(9 * dt);
+          velocity.normalize().multiplyScalar(settings.flySpeed * dt);
           camera.position.add(velocity);
           controls.target.add(velocity);
           cameraMemory.current = {
@@ -2607,7 +2647,7 @@ function App() {
         host.removeChild(renderer.domElement);
       if (engine.current?.renderer === renderer) engine.current = null;
     };
-  }, [objects, analyses, theme, selectedPoints]);
+  }, [objects, analyses, theme, selectedPoints, settings]);
   useEffect(() => {
     if (engine.current) {
       engine.current.grid.visible = showGrid;
@@ -2777,9 +2817,21 @@ function App() {
           >
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </Button>
+          <Button
+            title={copy("Preferences & Settings", "Beállítások", language)}
+            onClick={() => setSettingsOpen(true)}
+            active={settingsOpen}
+          >
+            <Settings size={16} />
+          </Button>
         </div>
       </header>
       <div className="workspace">
+        {settings.showFpsCounter && (
+          <div className="fps-hud-badge">
+            {fpsDisplay} FPS {settings.fpsLimit > 0 ? `(max ${settings.fpsLimit})` : ""}
+          </div>
+        )}
         <aside className="sidebar">
           <div className="section-head">
             <span>{copy("3D GEOMETRY", "3D GEOMETRIA", language)}</span>
@@ -3887,6 +3939,14 @@ function App() {
           )}
         </div>
       )}
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onChange={setSettings}
+        onReset={() => setSettings(defaultSettings)}
+        language={language}
+      />
     </div>
   );
 }

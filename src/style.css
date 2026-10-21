@@ -96,3 +96,29 @@
 .geom-context-item:hover{background:var(--hover);color:var(--accent)}
 .geom-context-item:disabled{opacity:0.4;cursor:not-allowed}
 
+/* Settings Modal & HUD */
+.settings-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px}
+.settings-modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;width:100%;max-width:580px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,0.5);color:var(--text);overflow:hidden}
+.settings-modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--panel2)}
+.settings-modal-header h3{margin:0;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.settings-modal-body{padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:20px}
+.settings-section{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.settings-section h4{margin:0 0 12px 0;font-size:12px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:0.5px}
+.settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:16px}
+.settings-row:last-child{border-bottom:none;padding-bottom:0}
+.settings-label-col{display:flex;flex-direction:column;gap:3px;flex:1}
+.settings-title{font-size:12.5px;font-weight:600;color:var(--text)}
+.settings-desc{font-size:11px;color:var(--muted);line-height:1.35}
+.settings-control-col{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:180px}
+.settings-control-col input[type="range"]{width:160px;cursor:pointer}
+.settings-value-badge{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--control);padding:2px 6px;border-radius:4px;border:1px solid var(--border)}
+.settings-modal-footer{padding:12px 20px;border-top:1px solid var(--border);background:var(--panel2);display:flex;justify-content:space-between;align-items:center}
+.toggle-switch{position:relative;display:inline-block;width:38px;height:22px}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--border);transition:.2s;border-radius:22px}
+.toggle-slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:#fff;transition:.2s;border-radius:50%}
+.toggle-switch input:checked + .toggle-slider{background:var(--accent)}
+.toggle-switch input:checked + .toggle-slider:before{transform:translateX(16px)}
+.fps-hud-badge{position:absolute;top:54px;right:16px;z-index:80;background:rgba(17,21,29,0.85);backdrop-filter:blur(4px);border:1px solid var(--border);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none}
+
+
