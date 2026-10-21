@@ -430,6 +430,8 @@ function App() {
   currentPrecision = settings.precision;
   const mountRef = useRef<HTMLDivElement>(null),
     engine = useRef<any>(null),
+    pointerPositionRef = useRef<{ x: number; y: number } | null>(null),
+    selectedPointsRef = useRef<SelectedPointEntry[]>(selectedPoints),
     cameraMemory = useRef({
       position: [13, 11, 15] as Vec3,
       target: [0, 0, 0] as Vec3,
@@ -442,6 +444,7 @@ function App() {
     selected = objects.find((o) => o.id === state.selected) || null;
   selectedRef.current = selected;
   stepRef.current = moveStep;
+  selectedPointsRef.current = selectedPoints;
   const analyses = useMemo(() => {
     const out: {
       id: string;
@@ -735,6 +738,35 @@ function App() {
   useEffect(() => {
     localStorage.setItem("tergeo-settings", JSON.stringify(settings));
   }, [settings]);
+  useEffect(() => {
+    const trackPointer = (event: PointerEvent) => {
+      pointerPositionRef.current = { x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener("pointermove", trackPointer, { passive: true });
+    const hoverCheck = window.setInterval(() => {
+      const position = pointerPositionRef.current;
+      const canvas = mountRef.current;
+      if (!position || !canvas) {
+        setHoverInfo(null);
+        return;
+      }
+      const element = document.elementFromPoint(position.x, position.y);
+      const overUiPanel = Boolean(
+        element?.closest(".sidebar, .inspector, .geom-context-menu"),
+      );
+      const rect = canvas.getBoundingClientRect();
+      const overCanvas =
+        position.x >= rect.left &&
+        position.x <= rect.right &&
+        position.y >= rect.top &&
+        position.y <= rect.bottom;
+      if (overUiPanel || !overCanvas) setHoverInfo(null);
+    }, 100);
+    return () => {
+      window.removeEventListener("pointermove", trackPointer);
+      window.clearInterval(hoverCheck);
+    };
+  }, []);
   const add = (
       kind: Kind,
       data: any,
@@ -1780,7 +1812,7 @@ function App() {
       settings.fov,
       1,
       0.1,
-      settings.renderDistance,
+      settings.renderDistance === 0 ? 1e9 : settings.renderDistance,
     );
     camera.position.set(...cameraMemory.current.position);
     const renderer = new THREE.WebGLRenderer({
@@ -1797,8 +1829,11 @@ function App() {
     controls.mouseButtons.RIGHT = -1 as any;
     controls.keyPanSpeed = 7;
     let isRightDragging = false,
+      rightDragMoved = false,
       lastPointerX = 0,
-      lastPointerY = 0;
+      lastPointerY = 0,
+      rightDownX = 0,
+      rightDownY = 0;
     const rotateCameraInPlace = (deltaYaw: number, deltaPitch: number) => {
       const forward = new THREE.Vector3();
       camera.getWorldDirection(forward);
@@ -1857,7 +1892,11 @@ function App() {
     };
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
-      if (selectedPoints.length > 0) {
+      if (rightDragMoved) {
+        rightDragMoved = false;
+        return;
+      }
+      if (selectedPointsRef.current.length > 0) {
         setContextMenu({ x: e.clientX, y: e.clientY });
         return;
       }
@@ -1962,7 +2001,7 @@ function App() {
       const n = new THREE.Vector3(...v);
       if (n.length() < 1e-9) return;
       const u = n.normalize(),
-        span = Math.max(settings.lineSpan, 500000),
+        span = settings.lineSpan === 0 ? 500000 : settings.lineSpan,
         pVec = new THREE.Vector3(...p),
         geo = new THREE.BufferGeometry().setFromPoints([
           pVec.clone().addScaledVector(u, -span),
@@ -1990,7 +2029,7 @@ function App() {
     ) => {
       const effectiveSize = size * settings.pointScale;
       const pointKey = `${id}__${role}`;
-      const isMultiSel = selectedPoints.some(
+      const isMultiSel = selectedPointsRef.current.some(
         (sp) => sp.key === pointKey || (role === "point" && sp.key === id),
       );
       const threeColor =
@@ -2012,9 +2051,33 @@ function App() {
         isPointLike: true,
         isMultiSelected: isMultiSel,
         originalColor: threeColor.clone(),
-        baseScale: effectiveSize / 0.11,
+        baseScale: 1,
       };
       group.add(m);
+    };
+    const updatePointSelectionVisuals = () => {
+      const selectedKeys = new Set(
+        selectedPointsRef.current.flatMap((point) => [
+          point.key,
+          ...(point.sourceObjId ? [point.sourceObjId] : []),
+        ]),
+      );
+      group.traverse((child: any) => {
+        if (!child.isMesh || !child.userData?.isPointLike) return;
+        const userData = child.userData;
+        const isSelected =
+          selectedKeys.has(userData.pointKey) ||
+          (userData.role === "point" && selectedKeys.has(userData.id));
+        userData.isMultiSelected = isSelected;
+        const material = child.material;
+        if (!material) return;
+        material.color.copy(isSelected ? new THREE.Color("#55d6be") : userData.originalColor);
+        material.emissive.copy(isSelected ? new THREE.Color("#55d6be") : userData.originalColor);
+        material.emissiveIntensity = isSelected ? 1.1 : 0.15;
+        material.transparent = false;
+        material.opacity = 1;
+        child.scale.setScalar(userData.baseScale || 1);
+      });
     };
     const labelSprite = (txt: string, col: string) => {
       const can = document.createElement("canvas");
@@ -2091,7 +2154,7 @@ function App() {
           u = new THREE.Vector3().crossVectors(N, ref).normalize(),
           v = new THREE.Vector3().crossVectors(N, u).normalize(),
           p = new THREE.Vector3(...vec(d.p || G.scale(n, d.d / G.dot(n, n)))),
-          s = Math.max(settings.planeSpan, 500000),
+          s = settings.planeSpan === 0 ? 500000 : settings.planeSpan,
           verts = [
             p.clone().addScaledVector(u, -s).addScaledVector(v, -s),
             p.clone().addScaledVector(u, s).addScaledVector(v, -s),
@@ -2349,7 +2412,7 @@ function App() {
               u = new THREE.Vector3().crossVectors(N, ref).normalize(),
               v = new THREE.Vector3().crossVectors(N, u).normalize(),
               center = new THREE.Vector3(...verts[0]),
-              s = Math.max(settings.planeSpan, 500000),
+          s = settings.planeSpan === 0 ? 500000 : settings.planeSpan,
               vs = [
                 center.clone().addScaledVector(u, -s).addScaledVector(v, -s),
                 center.clone().addScaledVector(u, s).addScaledVector(v, -s),
@@ -2510,17 +2573,29 @@ function App() {
       const camPos = camera.position;
       const camDist = camPos.length();
       const dynSpan = Math.max(500000, camDist * 3);
-      camera.far = Math.max(settings.renderDistance, dynSpan * 2.5);
-      camera.updateProjectionMatrix();
+      const isInfCam = settings.renderDistance === 0;
+      const desiredFar = isInfCam ? Math.max(1000000, dynSpan * 2.5) : settings.renderDistance;
+      if (Math.abs(camera.far - desiredFar) > 1) {
+        camera.far = desiredFar;
+        camera.updateProjectionMatrix();
+      }
+
+      const isLineInf = settings.lineSpan === 0;
+      const curLineSpan = isLineInf ? dynSpan : settings.lineSpan;
+
+      const isPlaneInf = settings.planeSpan === 0;
+      const curPlaneSpan = isPlaneInf ? dynSpan : settings.planeSpan;
+
       group.traverse((child: any) => {
         if (child.userData?.isInfiniteLine && child.geometry) {
           const bp = child.userData.baseP as THREE.Vector3;
           const dir = child.userData.dir as THREE.Vector3;
-          const t = camPos.clone().sub(bp).dot(dir);
-          const center = bp.clone().addScaledVector(dir, t);
+          const center = isLineInf
+            ? bp.clone().addScaledVector(dir, camPos.clone().sub(bp).dot(dir))
+            : bp;
           const pos = child.geometry.attributes.position;
-          const a = center.clone().addScaledVector(dir, -dynSpan);
-          const b = center.clone().addScaledVector(dir, dynSpan);
+          const a = center.clone().addScaledVector(dir, -curLineSpan);
+          const b = center.clone().addScaledVector(dir, curLineSpan);
           pos.setXYZ(0, a.x, a.y, a.z);
           pos.setXYZ(1, b.x, b.y, b.z);
           pos.needsUpdate = true;
@@ -2531,13 +2606,14 @@ function App() {
           const N = child.userData.normal as THREE.Vector3;
           const U = child.userData.u as THREE.Vector3;
           const V = child.userData.v as THREE.Vector3;
-          const dist = camPos.clone().sub(bp).dot(N);
-          const center = camPos.clone().addScaledVector(N, -dist);
+          const center = isPlaneInf
+            ? camPos.clone().addScaledVector(N, -camPos.clone().sub(bp).dot(N))
+            : bp;
           const pos = child.geometry.attributes.position;
-          const c0 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, -dynSpan);
-          const c1 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, -dynSpan);
-          const c2 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, dynSpan);
-          const c3 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, dynSpan);
+          const c0 = center.clone().addScaledVector(U, -curPlaneSpan).addScaledVector(V, -curPlaneSpan);
+          const c1 = center.clone().addScaledVector(U, curPlaneSpan).addScaledVector(V, -curPlaneSpan);
+          const c2 = center.clone().addScaledVector(U, curPlaneSpan).addScaledVector(V, curPlaneSpan);
+          const c3 = center.clone().addScaledVector(U, -curPlaneSpan).addScaledVector(V, curPlaneSpan);
           pos.setXYZ(0, c0.x, c0.y, c0.z);
           pos.setXYZ(1, c1.x, c1.y, c1.z);
           pos.setXYZ(2, c2.x, c2.y, c2.z);
@@ -2552,13 +2628,14 @@ function App() {
           const N = child.userData.normal as THREE.Vector3;
           const U = child.userData.u as THREE.Vector3;
           const V = child.userData.v as THREE.Vector3;
-          const dist = camPos.clone().sub(bp).dot(N);
-          const center = camPos.clone().addScaledVector(N, -dist);
+          const center = isPlaneInf
+            ? camPos.clone().addScaledVector(N, -camPos.clone().sub(bp).dot(N))
+            : bp;
           const pos = child.geometry.attributes.position;
-          const c0 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, -dynSpan);
-          const c1 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, -dynSpan);
-          const c2 = center.clone().addScaledVector(U, dynSpan).addScaledVector(V, dynSpan);
-          const c3 = center.clone().addScaledVector(U, -dynSpan).addScaledVector(V, dynSpan);
+          const c0 = center.clone().addScaledVector(U, -curPlaneSpan).addScaledVector(V, -curPlaneSpan);
+          const c1 = center.clone().addScaledVector(U, curPlaneSpan).addScaledVector(V, -curPlaneSpan);
+          const c2 = center.clone().addScaledVector(U, curPlaneSpan).addScaledVector(V, curPlaneSpan);
+          const c3 = center.clone().addScaledVector(U, -curPlaneSpan).addScaledVector(V, curPlaneSpan);
           pos.setXYZ(0, c0.x, c0.y, c0.z);
           pos.setXYZ(1, c1.x, c1.y, c1.z);
           pos.setXYZ(2, c2.x, c2.y, c2.z);
@@ -2569,24 +2646,6 @@ function App() {
         }
       });
 
-      if (selectedPoints.length > 0) {
-        const pulse = 0.5 + 0.5 * Math.sin(now * 0.014);
-        group.traverse((child: any) => {
-          if (child.isMesh && child.userData?.isMultiSelected) {
-            if (child.material) {
-              child.material.transparent = true;
-              child.material.opacity = 0.25 + 0.75 * pulse;
-              child.material.emissiveIntensity = 0.4 + 1.8 * pulse;
-              if (child.userData.originalColor) {
-                child.material.color.copy(child.userData.originalColor);
-                child.material.emissive.copy(child.userData.originalColor);
-              }
-            }
-            const bs = child.userData.baseScale || 1;
-            child.scale.setScalar(bs * (1.0 + 0.55 * pulse));
-          }
-        });
-      }
       renderer.render(scene, camera);
     };
     render();
@@ -2595,12 +2654,16 @@ function App() {
       setContextMenu(null);
       if (e.button === 2) {
         isRightDragging = true;
+        rightDragMoved = false;
+        rightDownX = e.clientX;
+        rightDownY = e.clientY;
         lastPointerX = e.clientX;
         lastPointerY = e.clientY;
         e.preventDefault();
         return;
       }
       if (e.button === 0) {
+        if (!e.ctrlKey) setSelectedPoints([]);
         if (e.ctrlKey) {
           const hit = ray;
           const r0 = renderer.domElement.getBoundingClientRect();
@@ -2634,6 +2697,11 @@ function App() {
           }
           if (foundPointItem) {
             const keyToToggle = foundPointItem.key;
+            const next = selectedPointsRef.current.some((p) => p.key === keyToToggle)
+              ? selectedPointsRef.current.filter((p) => p.key !== keyToToggle)
+              : selectedPointsRef.current.length >= 3
+                ? selectedPointsRef.current
+                : [...selectedPointsRef.current, foundPointItem];
             setSelectedPoints((prev) => {
               if (prev.some((p) => p.key === keyToToggle)) {
                 return prev.filter((p) => p.key !== keyToToggle);
@@ -2650,6 +2718,8 @@ function App() {
               }
               return [...prev, foundPointItem!];
             });
+            selectedPointsRef.current = next;
+            updatePointSelectionVisuals();
             return;
           }
           controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
@@ -2665,13 +2735,18 @@ function App() {
         hit.setFromCamera(mouse, camera);
         if (!hit.intersectObjects(group.children, true).length) {
           select(null);
+          selectedPointsRef.current = [];
           setSelectedPoints([]);
+          updatePointSelectionVisuals();
           return;
         }
         let node: any = hit.intersectObjects(group.children, true)[0].object;
         while (node && !node.userData.id) node = node.parent;
         if (node?.userData.id) {
           select(node.userData.id);
+          selectedPointsRef.current = [];
+          setSelectedPoints([]);
+          updatePointSelectionVisuals();
           if (
             node.userData.role &&
             node.userData.role !== "triangle" &&
@@ -2689,6 +2764,11 @@ function App() {
       if (isRightDragging) {
         const dx = e.clientX - lastPointerX,
           dy = e.clientY - lastPointerY;
+        if (
+          Math.hypot(e.clientX - rightDownX, e.clientY - rightDownY) > 5
+        ) {
+          rightDragMoved = true;
+        }
         lastPointerX = e.clientX;
         lastPointerY = e.clientY;
         rotateCameraInPlace(dx * 0.0035, -dy * 0.0035);
@@ -2751,7 +2831,7 @@ function App() {
         host.removeChild(renderer.domElement);
       if (engine.current?.renderer === renderer) engine.current = null;
     };
-  }, [objects, analyses, theme, selectedPoints, settings]);
+  }, [objects, analyses, theme, settings]);
   useEffect(() => {
     if (engine.current) {
       engine.current.grid.visible = showGrid;
@@ -3855,38 +3935,8 @@ function App() {
             )}
             <span> · {objects.length} objects</span>
           </div>
-          {selected &&
-            (selectedSubItem && selectedSubItem.parentId === selected.id ? (
-              <SubConstructionInspector
-                parent={selected}
-                role={selectedSubItem.role}
-                allObjects={checkableItems}
-                language={language}
-                notify={notify}
-                onBack={() => setSelectedSubItem(null)}
-                onPromotePoint={(pt) =>
-                  add("point", { p: pt.p }, "coordinate", undefined, pt.name)
-                }
-                onPromoteLine={(l) =>
-                  add(
-                    "line",
-                    { p: l.p, v: l.v },
-                    "direction",
-                    undefined,
-                    l.name,
-                  )
-                }
-                onPromoteCircle={(c) =>
-                  add(
-                    "circle",
-                    { center: c.center, radius: c.radius, normal: c.normal },
-                    "center-normal",
-                    undefined,
-                    c.name,
-                  )
-                }
-              />
-            ) : (
+          {selected && (
+            <div className="right-inspector-stack">
               <Inspector
                 object={selected}
                 update={(d) => update(selected.id, d)}
@@ -3921,7 +3971,40 @@ function App() {
                 language={language}
                 notify={notify}
               />
-            ))}
+              {selectedSubItem?.parentId === selected.id && (
+                <SubConstructionInspector
+                  parent={selected}
+                  role={selectedSubItem.role}
+                  allObjects={checkableItems}
+                  language={language}
+                  notify={notify}
+                  embedded
+                  onBack={() => setSelectedSubItem(null)}
+                  onPromotePoint={(pt) =>
+                    add("point", { p: pt.p }, "coordinate", undefined, pt.name)
+                  }
+                  onPromoteLine={(l) =>
+                    add(
+                      "line",
+                      { p: l.p, v: l.v },
+                      "direction",
+                      undefined,
+                      l.name,
+                    )
+                  }
+                  onPromoteCircle={(c) =>
+                    add(
+                      "circle",
+                      { center: c.center, radius: c.radius, normal: c.normal },
+                      "center-normal",
+                      undefined,
+                      c.name,
+                    )
+                  }
+                />
+              )}
+            </div>
+          )}
         </main>
       </div>
       {hoverInfo && (

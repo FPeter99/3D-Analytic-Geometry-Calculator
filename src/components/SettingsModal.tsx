@@ -17,13 +17,107 @@ export interface AppSettings {
 export const defaultSettings: AppSettings = {
   renderDistance: 5000,
   precision: 3,
-  lineSpan: 150,
-  planeSpan: 60,
+  lineSpan: 0,
+  planeSpan: 0,
   gridSize: 50,
   pointScale: 1.0,
   flySpeed: 12,
   fov: 48,
 };
+
+interface InfiniteSliderProps {
+  label: string;
+  desc: string;
+  value: number; // 0 = infinite
+  onChange: (v: number) => void;
+  min: number;
+  maxFinite: number;
+  step: number;
+  presets: number[];
+  unitLabel?: string;
+  lang: Language;
+}
+
+function InfiniteSlider({
+  label,
+  desc,
+  value,
+  onChange,
+  min,
+  maxFinite,
+  step,
+  presets,
+  unitLabel,
+  lang,
+}: InfiniteSliderProps) {
+  const isInfinite = value === 0;
+  const maxSlider = maxFinite + step;
+  const sliderPosition = isInfinite ? maxSlider : Math.min(value, maxFinite);
+
+  const handleSliderChange = (raw: number) => {
+    if (raw >= maxSlider) {
+      onChange(0); // 0 represents Infinite
+    } else {
+      onChange(Math.max(min, raw));
+    }
+  };
+
+  const formatDisplay = () => {
+    if (isInfinite) {
+      return `∞ (${copy('Infinite', 'Végtelen', lang)})`;
+    }
+    const valStr = value >= 1000 ? `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)}k` : `${value}`;
+    return unitLabel ? `${valStr} ${unitLabel}` : valStr;
+  };
+
+  return (
+    <div className="settings-row">
+      <div className="settings-label-col">
+        <span className="settings-title">{label}</span>
+        <span className="settings-desc">{desc}</span>
+      </div>
+      <div className="settings-control-col">
+        <div className="settings-slider-row">
+          <input
+            type="range"
+            min={min}
+            max={maxSlider}
+            step={step}
+            value={sliderPosition}
+            onChange={(e) => handleSliderChange(parseInt(e.target.value, 10))}
+          />
+          <span
+            className={`settings-value-badge ${isInfinite ? 'infinite-active' : ''}`}
+            style={{ minWidth: 80, textAlign: 'center' }}
+          >
+            {formatDisplay()}
+          </span>
+        </div>
+        <div className="settings-presets-row">
+          {presets.map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`settings-preset-btn ${!isInfinite && value === p ? 'active' : ''}`}
+              onClick={() => onChange(p)}
+            >
+              {p >= 1000 ? `${p / 1000}k` : p}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`settings-preset-btn ${isInfinite ? 'active' : ''}`}
+            onClick={() => onChange(0)}
+            style={{ fontWeight: 700 }}
+            title={copy('Set to Infinite', 'Beállítás végtelenre', lang)}
+          >
+            ∞ {copy('Infinite', 'Végtelen', lang)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -45,10 +139,7 @@ export function SettingsModal({
   if (!isOpen) return null;
 
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    onChange({
-      ...settings,
-      [key]: value,
-    });
+    onChange({ ...settings, [key]: value });
   };
 
   return (
@@ -65,13 +156,12 @@ export function SettingsModal({
         </div>
 
         <div className="settings-modal-body">
-          {/* SECTION 1: Calculation & Precision */}
+          {/* SECTION 1: Precision */}
           <div className="settings-section">
             <h4>
               <Cpu size={14} />
               {copy('Math & Calculation Precision', 'Matematika & Számítási pontosság', lang)}
             </h4>
-            
             <div className="settings-row">
               <div className="settings-label-col">
                 <span className="settings-title">
@@ -79,9 +169,9 @@ export function SettingsModal({
                 </span>
                 <span className="settings-desc">
                   {copy(
-                    'Precision used for coordinates, distance, equations, angles and metrics',
-                    'A koordináták, távolságok, egyenletek és szögek tizedesjegy-pontossága',
-                    lang
+                    'Precision used for coordinates, equations, angles and metrics',
+                    'A koordináták, egyenletek és szögek tizedesjegy-pontossága',
+                    lang,
                   )}
                 </span>
               </div>
@@ -120,180 +210,89 @@ export function SettingsModal({
             </div>
           </div>
 
-          {/* SECTION 2: 3D Scene & Geometry Extents */}
+          {/* SECTION 2: Geometry Extents & Infinite Sliders */}
           <div className="settings-section">
             <h4>
               <Eye size={14} />
-              {copy('Geometry Extent & Massive Viewport', 'Geometria méret & Hatalmas Látótér', lang)}
+              {copy('Geometry Extent & Massive Viewport', 'Geometria méret & Látótér', lang)}
             </h4>
 
-            {/* Render Distance (Camera Far) */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Render Distance (Camera Far)', 'Render távolság (Látótávolság)', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Maximum visible depth of the 3D camera frustum (up to 100,000+ units)', 'A 3D kamera maximális látótávolsága (akár 100 000+ egység)', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <div className="settings-slider-row">
-                  <input
-                    type="range"
-                    min="500"
-                    max="100000"
-                    step="500"
-                    value={Math.min(100000, settings.renderDistance)}
-                    onChange={(e) => update('renderDistance', parseInt(e.target.value, 10))}
-                  />
-                  <input
-                    type="number"
-                    min="200"
-                    max="500000"
-                    step="500"
-                    className="settings-num-input"
-                    value={settings.renderDistance}
-                    onChange={(e) => update('renderDistance', Math.max(200, parseInt(e.target.value, 10) || 500))}
-                  />
-                </div>
-                <div className="settings-presets-row">
-                  {[1000, 5000, 20000, 50000, 100000].map((dist) => (
-                    <button
-                      key={dist}
-                      type="button"
-                      className={`settings-preset-btn ${settings.renderDistance === dist ? 'active' : ''}`}
-                      onClick={() => update('renderDistance', dist)}
-                    >
-                      {dist >= 1000 ? `${dist / 1000}k` : dist}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
             {/* Line Span */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Infinite Line Extent (Span)', 'Egyenesek kiterjesztése (hossz)', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Visual length of 3D parametric infinite lines (up to 50,000+ units)', 'A 3D egyenesek virtuális render hossza (akár 50 000+ egység)', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <div className="settings-slider-row">
-                  <input
-                    type="range"
-                    min="25"
-                    max="50000"
-                    step="25"
-                    value={Math.min(50000, settings.lineSpan)}
-                    onChange={(e) => update('lineSpan', parseInt(e.target.value, 10))}
-                  />
-                  <input
-                    type="number"
-                    min="10"
-                    max="200000"
-                    step="50"
-                    className="settings-num-input"
-                    value={settings.lineSpan}
-                    onChange={(e) => update('lineSpan', Math.max(10, parseInt(e.target.value, 10) || 50))}
-                  />
-                </div>
-                <div className="settings-presets-row">
-                  {[100, 500, 2500, 10000, 50000].map((span) => (
-                    <button
-                      key={span}
-                      type="button"
-                      className={`settings-preset-btn ${settings.lineSpan === span ? 'active' : ''}`}
-                      onClick={() => update('lineSpan', span)}
-                    >
-                      ±{span >= 1000 ? `${span / 1000}k` : span}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <InfiniteSlider
+              label={copy('Infinite Line Extent (Length)', 'Egyenesek hossza (kiterjedés)', lang)}
+              desc={copy(
+                'Render length of 3D lines. Starts at 20, goes up to 5000, and drag to the very end for infinite.',
+                '3D egyenesek render hossza: 20-tól 5000-ig állítható, a legvégére húzva pedig végtelen.',
+                lang,
+              )}
+              value={settings.lineSpan}
+              onChange={(v) => update('lineSpan', v)}
+              min={20}
+              maxFinite={5000}
+              step={20}
+              presets={[20, 100, 500, 2000, 5000]}
+              unitLabel={copy('units', 'egység', lang)}
+              lang={lang}
+            />
 
             {/* Plane Span */}
-            <div className="settings-row">
-              <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Plane Representation Size (Span)', 'Síkok vizuális mérete (Kiterjedés)', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Dimension of supporting plane visual squares (up to 25,000+ half-width)', 'A tartósíkok négyszögének fél-szélessége (akár 25 000+)', lang)}
-                </span>
-              </div>
-              <div className="settings-control-col">
-                <div className="settings-slider-row">
-                  <input
-                    type="range"
-                    min="15"
-                    max="25000"
-                    step="25"
-                    value={Math.min(25000, settings.planeSpan)}
-                    onChange={(e) => update('planeSpan', parseInt(e.target.value, 10))}
-                  />
-                  <input
-                    type="number"
-                    min="10"
-                    max="100000"
-                    step="25"
-                    className="settings-num-input"
-                    value={settings.planeSpan}
-                    onChange={(e) => update('planeSpan', Math.max(10, parseInt(e.target.value, 10) || 50))}
-                  />
-                </div>
-                <div className="settings-presets-row">
-                  {[50, 250, 1000, 5000, 25000].map((pspan) => (
-                    <button
-                      key={pspan}
-                      type="button"
-                      className={`settings-preset-btn ${settings.planeSpan === pspan ? 'active' : ''}`}
-                      onClick={() => update('planeSpan', pspan)}
-                    >
-                      {pspan >= 1000 ? `${pspan / 1000}k` : pspan}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <InfiniteSlider
+              label={copy('Plane Representation Size (Span)', 'Síkok vizuális mérete', lang)}
+              desc={copy(
+                'Half-width size of supporting planes. Starts at 20, goes up to 5000, and drag to the very end for infinite.',
+                'A tartósíkok négyszögének mérete: 20-tól 5000-ig állítható, a legvégére húzva pedig végtelen.',
+                lang,
+              )}
+              value={settings.planeSpan}
+              onChange={(v) => update('planeSpan', v)}
+              min={20}
+              maxFinite={5000}
+              step={20}
+              presets={[20, 100, 500, 2000, 5000]}
+              unitLabel={copy('units', 'egység', lang)}
+              lang={lang}
+            />
 
-            {/* Coordinate Grid Size */}
+            {/* Render Distance (Camera Far) */}
+            <InfiniteSlider
+              label={copy('Render Distance (Camera Far)', 'Render távolság (Látótávolság)', lang)}
+              desc={copy(
+                'Maximum visible depth of 3D camera. Starts at 500, goes up to 50000, drag to end for infinite.',
+                'A 3D kamera maximális látótávolsága: 500-tól 50000-ig, a legvégére húzva korlátlan/végtelen.',
+                lang,
+              )}
+              value={settings.renderDistance}
+              onChange={(v) => update('renderDistance', v)}
+              min={500}
+              maxFinite={50000}
+              step={500}
+              presets={[1000, 5000, 20000, 50000]}
+              unitLabel={copy('units', 'egység', lang)}
+              lang={lang}
+            />
+
+            {/* Grid Size */}
             <div className="settings-row">
               <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Coordinate Grid Extent', 'Koordinátarács mérete', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Dimension and subdivision of the reference ground plane grid', 'A vízszintes referenciasík rácsának teljes kiterjedése', lang)}
-                </span>
+                <span className="settings-title">{copy('Coordinate Grid Extent', 'Koordinátarács mérete', lang)}</span>
+                <span className="settings-desc">{copy('Ground plane grid size', 'Referenciasík rács kiterjedése', lang)}</span>
               </div>
               <div className="settings-control-col">
                 <div className="settings-slider-row">
                   <input
                     type="range"
-                    min="20"
-                    max="5000"
-                    step="20"
+                    min={20}
+                    max={5000}
+                    step={20}
                     value={Math.min(5000, settings.gridSize)}
                     onChange={(e) => update('gridSize', parseInt(e.target.value, 10))}
                   />
-                  <input
-                    type="number"
-                    min="20"
-                    max="50000"
-                    step="50"
-                    className="settings-num-input"
-                    value={settings.gridSize}
-                    onChange={(e) => update('gridSize', Math.max(20, parseInt(e.target.value, 10) || 40))}
-                  />
+                  <span className="settings-value-badge">
+                    {settings.gridSize} × {settings.gridSize}
+                  </span>
                 </div>
                 <div className="settings-presets-row">
-                  {[40, 100, 500, 2000, 5000].map((gs) => (
+                  {[40, 100, 500, 2000].map((gs) => (
                     <button
                       key={gs}
                       type="button"
@@ -307,15 +306,11 @@ export function SettingsModal({
               </div>
             </div>
 
-            {/* Camera FOV */}
+            {/* FOV */}
             <div className="settings-row">
               <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Field of View (FOV)', 'Kamera látószög (FOV)', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Perspective camera vertical aperture angle', 'A 3D perspektív kamera függőleges látószöge', lang)}
-                </span>
+                <span className="settings-title">{copy('Field of View (FOV)', 'Kamera látószög (FOV)', lang)}</span>
+                <span className="settings-desc">{copy('Perspective camera vertical angle', 'Perspektív kamera függőleges szöge', lang)}</span>
               </div>
               <div className="settings-control-col">
                 <div className="settings-slider-row">
@@ -332,15 +327,11 @@ export function SettingsModal({
               </div>
             </div>
 
-            {/* Point Size Scale */}
+            {/* Point Scale */}
             <div className="settings-row">
               <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('Point Sphere Scale', 'Pontok méretaránya', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Radius multiplier for points and vertices in 3D scene', 'A pontok és csúcsok 3D gömbméretének szorzója', lang)}
-                </span>
+                <span className="settings-title">{copy('Point Sphere Scale', 'Pontok méretaránya', lang)}</span>
+                <span className="settings-desc">{copy('Radius multiplier for 3D points', 'A pontok gömbméretének szorzója', lang)}</span>
               </div>
               <div className="settings-control-col">
                 <div className="settings-slider-row">
@@ -357,15 +348,11 @@ export function SettingsModal({
               </div>
             </div>
 
-            {/* Fly movement speed */}
+            {/* Fly speed */}
             <div className="settings-row">
               <div className="settings-label-col">
-                <span className="settings-title">
-                  {copy('WASD Flight Movement Speed', 'WASD repülési sebesség', lang)}
-                </span>
-                <span className="settings-desc">
-                  {copy('Movement velocity during keyboard navigation (useful for vast spaces)', 'Kameramozgás sebessége nagy terek bejárásakor', lang)}
-                </span>
+                <span className="settings-title">{copy('WASD Flight Speed', 'WASD repülési sebesség', lang)}</span>
+                <span className="settings-desc">{copy('Movement velocity for keyboard nav', 'Billentyűzetes navigáció sebessége', lang)}</span>
               </div>
               <div className="settings-control-col">
                 <div className="settings-slider-row">
@@ -377,15 +364,7 @@ export function SettingsModal({
                     value={settings.flySpeed}
                     onChange={(e) => update('flySpeed', parseInt(e.target.value, 10))}
                   />
-                  <input
-                    type="number"
-                    min="2"
-                    max="1000"
-                    step="5"
-                    className="settings-num-input"
-                    value={settings.flySpeed}
-                    onChange={(e) => update('flySpeed', Math.max(2, parseInt(e.target.value, 10) || 10))}
-                  />
+                  <span className="settings-value-badge">{settings.flySpeed} u/s</span>
                 </div>
                 <div className="settings-presets-row">
                   {[9, 25, 60, 150].map((spd) => (

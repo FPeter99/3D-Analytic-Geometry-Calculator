@@ -17,8 +17,9 @@ export interface SubConstructionInspectorProps{
  role:string
  allObjects:Array<{id:string;name:string;kind:string;color:string;data:any}>
  language:Language
- notify:(msg:string)=>void
- onBack:()=>void
+  notify:(msg:string)=>void
+  onBack:()=>void
+  embedded?:boolean
  onPromotePoint?:(point:{p:Vec3;name:string})=>void
  onPromoteLine?:(line:{p:Vec3;v:Vec3;name:string})=>void
  onPromoteCircle?:(circle:{center:Vec3;radius:number;normal:Vec3;name:string})=>void
@@ -52,8 +53,9 @@ export function SubConstructionInspector({
  role,
  allObjects,
  language:lang,
- notify,
- onBack,
+  notify,
+  onBack,
+  embedded=false,
  onPromotePoint,
  onPromoteLine,
  onPromoteCircle
@@ -346,23 +348,24 @@ export function SubConstructionInspector({
  }
 
  return(
-  <div className="inspector">
-   {/* Header with back button */}
-   <div className="inspector-card" style={{borderColor:parent.color}}>
-    <div style={{padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-     <button
-      className="action-btn"
-      style={{width:'auto',padding:'4px 8px',height:28}}
+   <div className={embedded ? 'subconstruction-embedded' : 'inspector'}>
+    {!embedded && (
+     <div className="inspector-card" style={{borderColor:parent.color}}>
+      <div style={{padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+      <button
+       className="action-btn"
+       style={{width:'auto',padding:'4px 8px',height:28}}
       onClick={onBack}
      >
       <ArrowLeft size={13}/>
       <span>{copyText('Back to '+parent.name,'Vissza: '+parent.name,lang)}</span>
      </button>
-     <span style={{fontSize:11,color:'var(--muted)'}}>
-      {parent.name}
-     </span>
-    </div>
-   </div>
+      <span style={{fontSize:11,color:'var(--muted)'}}>
+       {parent.name}
+      </span>
+      </div>
+     </div>
+    )}
 
    {/* Main Info Card */}
    <div className="inspector-card" style={{borderLeft:'3px solid var(--accent)'}}>

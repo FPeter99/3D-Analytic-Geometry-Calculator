@@ -119,6 +119,7 @@
 .settings-preset-btn:hover{background:var(--hover);color:var(--accent);border-color:var(--accent)}
 .settings-preset-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .settings-value-badge{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--control);padding:2px 6px;border-radius:4px;border:1px solid var(--border)}
+.settings-value-badge.infinite-active{color:#fff;background:var(--accent);border-color:var(--accent);font-weight:700}
 .settings-modal-footer{padding:12px 20px;border-top:1px solid var(--border);background:var(--panel2);display:flex;justify-content:space-between;align-items:center}
 .toggle-switch{position:relative;display:inline-block;width:38px;height:22px}
 .toggle-switch input{opacity:0;width:0;height:0}
