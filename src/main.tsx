@@ -2089,9 +2089,9 @@ function App() {
         userData.isMultiSelected = isSelected;
         const material = child.material;
         if (!material) return;
-        material.color.copy(isSelected ? new THREE.Color("#55d6be") : userData.originalColor);
-        material.emissive.copy(isSelected ? new THREE.Color("#55d6be") : userData.originalColor);
-        material.emissiveIntensity = isSelected ? 1.1 : 0.15;
+        material.color.copy(userData.originalColor);
+        material.emissive.copy(userData.originalColor);
+        material.emissiveIntensity = isSelected ? 1.0 : 0.15;
         material.transparent = false;
         material.opacity = 1;
         child.scale.setScalar(userData.baseScale || 1);
@@ -2665,6 +2665,16 @@ function App() {
         }
       });
 
+      if (selectedPointsRef.current.length > 0) {
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.006);
+        group.traverse((child: any) => {
+          if (!child.isMesh || !child.userData?.isPointLike || !child.userData?.isMultiSelected) return;
+          const material = child.material;
+          if (material) material.emissiveIntensity = 0.25 + 1.25 * pulse;
+          const baseScale = child.userData.baseScale || 1;
+          child.scale.setScalar(baseScale * (1 + 0.22 * pulse));
+        });
+      }
       renderer.render(scene, camera);
     };
     render();
@@ -2723,24 +2733,11 @@ function App() {
           }
           if (foundPointItem) {
             const keyToToggle = foundPointItem.key;
-            const next = selectedPointsRef.current.some((p) => p.key === keyToToggle)
-              ? selectedPointsRef.current.filter((p) => p.key !== keyToToggle)
-              : selectedPointsRef.current.length >= 3
-                ? selectedPointsRef.current
-                : [...selectedPointsRef.current, foundPointItem];
-            if (
-              !selectedPointsRef.current.some((p) => p.key === keyToToggle) &&
-              selectedPointsRef.current.length >= 3
-            ) {
-              notify(
-                copy(
-                  "Maximum 3 points can be selected at once",
-                  "Legfeljebb 3 pont jelölhető ki egyszerre",
-                  language,
-                ),
-              );
-              return;
-            }
+            const current = selectedPointsRef.current;
+            const alreadySelected = current.some((p) => p.key === keyToToggle);
+            const next = alreadySelected
+              ? current.filter((p) => p.key !== keyToToggle)
+              : [...current, foundPointItem].slice(-3);
             selectedPointsRef.current = next;
             setSelectedPoints(next);
             updatePointSelectionVisuals();
@@ -3085,30 +3082,19 @@ function App() {
                 onClick={(e) => {
                   if (e.ctrlKey && o.kind === "point" && o.data?.p) {
                     const keyToToggle = o.id;
-                    const prev = selectedPointsRef.current;
-                    let next = prev;
-                    if (prev.some((p) => p.key === keyToToggle)) {
-                      next = prev.filter((p) => p.key !== keyToToggle);
-                    } else if (prev.length >= 3) {
-                      notify(
-                        copy(
-                          "Maximum 3 points can be selected at once",
-                          "Legfeljebb 3 pont jelölhető ki egyszerre",
-                          language,
-                        ),
-                      );
-                    } else {
-                      next = [
-                        ...prev,
+                    const current = selectedPointsRef.current;
+                    const next = current.some((p) => p.key === keyToToggle)
+                      ? current.filter((p) => p.key !== keyToToggle)
+                      : [
+                        ...current,
                         {
                           key: o.id,
                           name: o.name,
-                          coord: [o.data.p[0], o.data.p[1], o.data.p[2]],
+                          coord: [o.data.p[0], o.data.p[1], o.data.p[2]] as Vec3,
                           sourceObjId: o.id,
                           color: o.color,
                         },
-                      ];
-                    }
+                      ].slice(-3);
                     selectedPointsRef.current = next;
                     setSelectedPoints(next);
                     engine.current?.updatePointSelectionVisuals?.();
