@@ -439,7 +439,8 @@ function App() {
     fileRef = useRef<HTMLInputElement>(null),
     toastTimer = useRef<any>(null),
     selectedRef = useRef<Obj | null>(null),
-    stepRef = useRef(moveStep);
+    stepRef = useRef(moveStep),
+    pointVisualUpdaterRef = useRef<(() => void) | null>(null);
   const objects = useMemo(() => derive(state.objects), [state.objects]),
     selected = objects.find((o) => o.id === state.selected) || null;
   selectedRef.current = selected;
@@ -714,6 +715,23 @@ function App() {
     }
     return list;
   }, [objects, analyses, language]);
+  const selectedSubObject = useMemo(() => {
+    if (!selectedSubItem || !selected) return null;
+    return objects.find((o) => o.id === selectedSubItem.parentId) || selected;
+  }, [selectedSubItem, selected, objects]);
+  const subObjectNotify = (message: string) => {
+    notify(message);
+    if (!selectedSubItem) return;
+    window.setTimeout(() => {
+      setSelectedSubItem((current) =>
+        current?.parentId === selectedSubItem.parentId ? null : current,
+      );
+    }, 1800);
+  };
+  useEffect(() => {
+    selectedPointsRef.current = selectedPoints;
+    pointVisualUpdaterRef.current?.();
+  }, [selectedPoints]);
   const notify = (s: string) => {
       setToast(s);
       clearTimeout(toastTimer.current);
@@ -2079,6 +2097,7 @@ function App() {
         child.scale.setScalar(userData.baseScale || 1);
       });
     };
+    pointVisualUpdaterRef.current = updatePointSelectionVisuals;
     const labelSprite = (txt: string, col: string) => {
       const can = document.createElement("canvas");
       can.width = 96;
@@ -2649,6 +2668,13 @@ function App() {
       renderer.render(scene, camera);
     };
     render();
+    let pointerDownSelectionVersion = 0;
+    const clearPointSelection = () => {
+      pointerDownSelectionVersion++;
+      selectedPointsRef.current = [];
+      setSelectedPoints([]);
+      updatePointSelectionVisuals();
+    };
     const down = (e: PointerEvent) => {
       setHoverInfo(null);
       setContextMenu(null);
@@ -2663,7 +2689,7 @@ function App() {
         return;
       }
       if (e.button === 0) {
-        if (!e.ctrlKey) setSelectedPoints([]);
+        if (!e.ctrlKey) clearPointSelection();
         if (e.ctrlKey) {
           const hit = ray;
           const r0 = renderer.domElement.getBoundingClientRect();
@@ -2702,26 +2728,27 @@ function App() {
               : selectedPointsRef.current.length >= 3
                 ? selectedPointsRef.current
                 : [...selectedPointsRef.current, foundPointItem];
-            setSelectedPoints((prev) => {
-              if (prev.some((p) => p.key === keyToToggle)) {
-                return prev.filter((p) => p.key !== keyToToggle);
-              }
-              if (prev.length >= 3) {
-                notify(
-                  copy(
-                    "Maximum 3 points can be selected at once",
-                    "Legfeljebb 3 pont jelölhető ki egyszerre",
-                    language,
-                  ),
-                );
-                return prev;
-              }
-              return [...prev, foundPointItem!];
-            });
+            if (
+              !selectedPointsRef.current.some((p) => p.key === keyToToggle) &&
+              selectedPointsRef.current.length >= 3
+            ) {
+              notify(
+                copy(
+                  "Maximum 3 points can be selected at once",
+                  "Legfeljebb 3 pont jelölhető ki egyszerre",
+                  language,
+                ),
+              );
+              return;
+            }
             selectedPointsRef.current = next;
+            setSelectedPoints(next);
             updatePointSelectionVisuals();
             return;
           }
+          select(null);
+          setSelectedSubItem(null);
+          clearPointSelection();
           controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
         } else {
           controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
@@ -2735,18 +2762,16 @@ function App() {
         hit.setFromCamera(mouse, camera);
         if (!hit.intersectObjects(group.children, true).length) {
           select(null);
-          selectedPointsRef.current = [];
-          setSelectedPoints([]);
-          updatePointSelectionVisuals();
+          setSelectedSubItem(null);
+          clearPointSelection();
           return;
         }
         let node: any = hit.intersectObjects(group.children, true)[0].object;
         while (node && !node.userData.id) node = node.parent;
         if (node?.userData.id) {
           select(node.userData.id);
-          selectedPointsRef.current = [];
-          setSelectedPoints([]);
-          updatePointSelectionVisuals();
+          setSelectedSubItem(null);
+          clearPointSelection();
           if (
             node.userData.role &&
             node.userData.role !== "triangle" &&
@@ -2803,7 +2828,15 @@ function App() {
     renderer.domElement.addEventListener("pointermove", movePointer);
     renderer.domElement.addEventListener("pointerup", upPointer);
     renderer.domElement.addEventListener("pointercancel", upPointer);
-    engine.current = { scene, camera, controls, renderer, axes, grid };
+    engine.current = {
+      scene,
+      camera,
+      controls,
+      renderer,
+      axes,
+      grid,
+      updatePointSelectionVisuals,
+    };
     return () => {
       cameraMemory.current = {
         position: camera.position.toArray() as Vec3,
@@ -2830,6 +2863,7 @@ function App() {
       if (host.contains(renderer.domElement))
         host.removeChild(renderer.domElement);
       if (engine.current?.renderer === renderer) engine.current = null;
+      pointVisualUpdaterRef.current = null;
     };
   }, [objects, analyses, theme, settings]);
   useEffect(() => {
@@ -2846,6 +2880,7 @@ function App() {
       let handled = false;
       if (e.key === "Escape") {
         select(null);
+        setSelectedSubItem(null);
         setSelectedPoints([]);
         setContextMenu(null);
         return;
@@ -3010,7 +3045,7 @@ function App() {
           </Button>
         </div>
       </header>
-      <div className="workspace">
+        <div className={`workspace ${selected ? "has-inspector" : ""}`}>
         <aside className="sidebar">
           <div className="section-head">
             <span>{copy("3D GEOMETRY", "3D GEOMETRIA", language)}</span>
@@ -3050,21 +3085,20 @@ function App() {
                 onClick={(e) => {
                   if (e.ctrlKey && o.kind === "point" && o.data?.p) {
                     const keyToToggle = o.id;
-                    setSelectedPoints((prev) => {
-                      if (prev.some((p) => p.key === keyToToggle)) {
-                        return prev.filter((p) => p.key !== keyToToggle);
-                      }
-                      if (prev.length >= 3) {
-                        notify(
-                          copy(
-                            "Maximum 3 points can be selected at once",
-                            "Legfeljebb 3 pont jelölhető ki egyszerre",
-                            language,
-                          ),
-                        );
-                        return prev;
-                      }
-                      return [
+                    const prev = selectedPointsRef.current;
+                    let next = prev;
+                    if (prev.some((p) => p.key === keyToToggle)) {
+                      next = prev.filter((p) => p.key !== keyToToggle);
+                    } else if (prev.length >= 3) {
+                      notify(
+                        copy(
+                          "Maximum 3 points can be selected at once",
+                          "Legfeljebb 3 pont jelölhető ki egyszerre",
+                          language,
+                        ),
+                      );
+                    } else {
+                      next = [
                         ...prev,
                         {
                           key: o.id,
@@ -3074,7 +3108,10 @@ function App() {
                           color: o.color,
                         },
                       ];
-                    });
+                    }
+                    selectedPointsRef.current = next;
+                    setSelectedPoints(next);
+                    engine.current?.updatePointSelectionVisuals?.();
                     return;
                   }
                   select(o.id);
@@ -3935,49 +3972,50 @@ function App() {
             )}
             <span> · {objects.length} objects</span>
           </div>
+        </main>
           {selected && (
-            <div className="right-inspector-stack">
+          <aside className="right-inspector-stack">
               <Inspector
-                object={selected}
-                update={(d) => update(selected.id, d)}
-                meta={(k, v) => meta(selected.id, k, v)}
-                remove={() => remove(selected.id)}
-                options={
-                  new Set(
-                    Object.keys(selected.data).filter(
-                      (k) => selected.data[k] === true,
-                    ),
-                  )
-                }
-                toggle={(k) => toggleTriangle(selected, k)}
-                planeAction={planeFromTriangle}
-                createLine={(line) =>
-                  add(
-                    "line",
-                    { p: line.p, v: line.v },
-                    "direction",
-                    undefined,
-                    line.name,
-                  )
-                }
-                createCenterPoint={(type, coord, nHu, nEn) =>
-                  createCenterPoint(type, coord, nHu, nEn)
-                }
-                createCircle={(type, data, cname) =>
-                  createCircleFromTriangle(type, data, cname)
-                }
-                moveStep={moveStep}
-                setMoveStep={setMoveStep}
-                language={language}
+              object={selected}
+              update={(d) => update(selected.id, d)}
+              meta={(k, v) => meta(selected.id, k, v)}
+              remove={() => remove(selected.id)}
+              options={
+                new Set(
+                  Object.keys(selected.data).filter(
+                    (k) => selected.data[k] === true,
+                  ),
+                )
+              }
+              toggle={(k) => toggleTriangle(selected, k)}
+              planeAction={planeFromTriangle}
+              createLine={(line) =>
+                add(
+                  "line",
+                  { p: line.p, v: line.v },
+                  "direction",
+                  undefined,
+                  line.name,
+                )
+              }
+              createCenterPoint={(type, coord, nHu, nEn) =>
+                createCenterPoint(type, coord, nHu, nEn)
+              }
+              createCircle={(type, data, cname) =>
+                createCircleFromTriangle(type, data, cname)
+              }
+              moveStep={moveStep}
+              setMoveStep={setMoveStep}
+              language={language}
                 notify={notify}
               />
-              {selectedSubItem?.parentId === selected.id && (
+              {selectedSubItem && (
                 <SubConstructionInspector
-                  parent={selected}
+                  parent={selectedSubObject || selected}
                   role={selectedSubItem.role}
                   allObjects={checkableItems}
                   language={language}
-                  notify={notify}
+                  notify={subObjectNotify}
                   embedded
                   onBack={() => setSelectedSubItem(null)}
                   onPromotePoint={(pt) =>
@@ -4003,9 +4041,8 @@ function App() {
                   }
                 />
               )}
-            </div>
-          )}
-        </main>
+          </aside>
+        )}
       </div>
       {hoverInfo && (
         <div
