@@ -59,6 +59,88 @@ export const planeAngle=(a:Plane,b:Plane):number=>Math.acos(Math.max(-1,Math.min
 export const closestLineSegment=(a:Line,b:Line)=>{const r=lineRelation(a,b);return{...r,segment:r.closestA&&r.closestB?{p:r.closestA,q:r.closestB}:undefined}}
 export const triangleMetrics=(a:Vec3,b:Vec3,c:Vec3)=>{const ab=sub(b,a),ac=sub(c,a),bc=sub(c,b),crossN=cross(ab,ac),twice=norm(crossN);if(twice<EPS)throw new Error('A pontok kollineárisak, nem alkotnak háromszöget.');const lengths=[norm(ab),norm(bc),norm(sub(a,c))],angleAt=(x:number,y:number,z:number)=>Math.acos(Math.max(-1,Math.min(1,(x*x+z*z-y*y)/(2*x*z))));const centroid=scale(add(add(a,b),c),1/3),normal=normalize(crossN),d=dot(crossN,a),altitude=(vertex:Vec3,s:Vec3,t:Vec3)=>pointLineProjection(vertex,{p:s,v:sub(t,s)});const hA=altitude(a,b,c),hB=altitude(b,a,c),hC=altitude(c,a,b);const orthocenter=add(a,scale(cross(crossN,bc),dot(sub(b,a),sub(a,c))/dot(crossN,crossN)));return{lengths,angles:[angleAt(lengths[0],lengths[2],lengths[1]),angleAt(lengths[0],lengths[1],lengths[2]),angleAt(lengths[1],lengths[0],lengths[2])],perimeter:lengths.reduce((x,y)=>x+y,0),area:twice/2,centroid,normal,d,altitudes:[hA,hB,hC],orthocenter,plane:{n:crossN,d:dot(crossN,a)}}}
 export const distance=(a:Vec3,b:Vec3)=>norm(sub(a,b))
+/** Minimum Euclidean distance between supported geometric objects. */
+export const objectDistance=(a:{kind:string;data:any},b:{kind:string;data:any}):number=>{
+ // A free vector has no unique position; for distance checks treat it as the segment from origin to its endpoint.
+ if(a.kind==='vector')a={...a,kind:'segment',data:{p:[0,0,0],q:a.data.v}}
+ if(b.kind==='vector')b={...b,kind:'segment',data:{p:[0,0,0],q:b.data.v}}
+ const k1=a.kind,k2=b.kind,x=a.data,y=b.data
+ const pair=(p:string,q:string)=>(k1===p&&k2===q)||(k1===q&&k2===p)
+ const get=(k:string)=>k1===k?x:y
+ const point=(o:any):Vec3=>o.p as Vec3
+ const line=(o:any):Line=>o as Line
+ const plane=(o:any):Plane=>o as Plane
+ const center=(o:any):Vec3=>o.center as Vec3
+ const radius=(o:any)=>Number(o.radius)
+ const asLine=(o:any):Line=>o.p&&o.q?lineFromPoints(o.p,o.q):o
+ const ball=(k:string)=>k==='sphere'||k==='circle'
+ if(k1==='point'&&k2==='point')return distance(point(x),point(y))
+ if(pair('point','line'))return pointLineDistance(point(get('point')),line(get('line')))
+ if(pair('point','segment'))return distance(point(get('point')),closestPointOnSegment(point(get('point')),asLine(get('segment'))))
+ if(pair('point','plane'))return pointPlaneDistance(point(get('point')),plane(get('plane')))
+ if(pair('point','sphere')||pair('point','circle')){const o=get(k1==='point'?k2:k1);return Math.max(0,distance(point(get('point')),center(o))-radius(o))}
+ if(pair('point','triangle')){const t=get('triangle');return pointTriangleDistance(point(k1==='point'?x:y),t.a,t.b,t.c)}
+ if(pair('triangle','triangle')){const t=get('triangle'),u=k1==='triangle'?y:x;return Math.min(...[t.a,t.b,t.c].map(p=>pointTriangleDistance(p,u.a,u.b,u.c)),...[u.a,u.b,u.c].map(p=>pointTriangleDistance(p,t.a,t.b,t.c)))}
+ if(pair('triangle','sphere')||pair('triangle','circle')){const t=get('triangle'),o=get(k1==='triangle'?k2:k1);return Math.max(0,pointTriangleDistance(center(o),t.a,t.b,t.c)-radius(o))}
+ if(pair('plane','sphere')||pair('plane','circle')){const o=get(k1==='plane'?k2:k1);return Math.max(0,pointPlaneDistance(center(o),plane(get('plane')))-radius(o))}
+ if(pair('line','triangle'))return lineTriangleDistance(line(get('line')),get('triangle'))
+ if(pair('segment','triangle'))return segmentTriangleDistance(asLine(get('segment')),get('triangle'))
+ if(pair('triangle','sphere')||pair('triangle','circle')){const t=get('triangle'),o=get(k1==='triangle'?k2:k1);return Math.max(0,pointTriangleDistance(center(o),t.a,t.b,t.c)-radius(o))}
+ if(pair('plane','triangle'))return Math.min(...[get('triangle').a,get('triangle').b,get('triangle').c].map(p=>pointPlaneDistance(p,plane(get('plane')))))
+ if(pair('line','line'))return lineRelation(line(x),line(y)).distance??0
+ if(pair('line','segment'))return lineRelation(asLine(get('line')),asLine(get('segment'))).distance??0
+ if(pair('segment','segment'))return segmentDistance(asLine(x),asLine(y))
+ if(pair('line','plane'))return linePlaneRelation(line(get('line')),plane(get('plane'))).distance??0
+ if(pair('segment','plane'))return segmentPlaneDistance(asLine(get('segment')),plane(get('plane')))
+ if(k1==='plane'&&k2==='plane')return planeRelation(plane(x),plane(y)).distance??0
+ if(ball(k1)&&ball(k2))return Math.max(0,distance(center(x),center(y))-radius(x)-radius(y))
+ if(ball(k1)&&k2==='point')return Math.max(0,distance(center(x),point(y))-radius(x))
+ if(k1==='point'&&ball(k2))return Math.max(0,distance(point(x),center(y))-radius(y))
+ if(ball(k1)&&k2==='plane')return Math.max(0,pointPlaneDistance(center(x),plane(y))-radius(x))
+ if(k1==='plane'&&ball(k2))return Math.max(0,pointPlaneDistance(center(y),plane(x))-radius(y))
+ if(ball(k1)&&k2==='line')return Math.max(0,pointLineDistance(center(x),line(y))-radius(x))
+ if(k1==='line'&&ball(k2))return Math.max(0,pointLineDistance(center(y),line(x))-radius(y))
+ if(ball(k1)&&k2==='segment')return Math.max(0,distance(center(x),closestPointOnSegment(center(x),asLine(y)))-radius(x))
+ if(k1==='segment'&&ball(k2))return Math.max(0,distance(center(y),closestPointOnSegment(center(y),asLine(x)))-radius(y))
+ if(pair('line','sphere')||pair('line','circle')){const o=get(k1==='line'?k2:k1);return Math.max(0,pointLineDistance(center(o),line(get('line')))-radius(o))}
+ if(pair('segment','sphere')||pair('segment','circle')){const o=get(k1==='segment'?k2:k1);return Math.max(0,distance(center(o),closestPointOnSegment(center(o),asLine(get('segment'))))-radius(o))}
+ throw new Error('Ehhez az objektumpárhoz nem érhető el távolságszámítás.')
+}
+const closestPointOnSegment=(p:Vec3,l:Line):Vec3=>{const t=Math.max(0,Math.min(1,dot(sub(p,l.p),l.v)/dot(l.v,l.v)));return add(l.p,scale(l.v,t))}
+const pointTriangleDistance=(p:Vec3,a:Vec3,b:Vec3,c:Vec3):number=>{
+ const n=cross(sub(b,a),sub(c,a));if(norm(n)<EPS)throw new Error('A háromszög elfajult.')
+ const projected=pointPlaneProjection(p,{n,d:dot(n,a)}), v0=sub(b,a),v1=sub(c,a),v2=sub(projected,a),d00=dot(v0,v0),d01=dot(v0,v1),d11=dot(v1,v1),d20=dot(v2,v0),d21=dot(v2,v1),den=d00*d11-d01*d01
+ const v=(d11*d20-d01*d21)/den,w=(d00*d21-d01*d20)/den,u=1-v-w
+ if(u>=0&&v>=0&&w>=0)return pointPlaneDistance(p,{n,d:dot(n,a)})
+ return Math.min(...[[a,b],[b,c],[c,a]].map(([s,e])=>distance(p,closestPointOnSegment(p,lineFromPoints(s,e)))))
+}
+const lineTriangleDistance=(l:Line,t:{a:Vec3;b:Vec3;c:Vec3}):number=>{
+ const n=cross(sub(t.b,t.a),sub(t.c,t.a)), hit=linePlaneRelation(l,{n,d:dot(n,t.a)})
+ if(hit.point&&pointInTriangle(hit.point,t.a,t.b,t.c))return 0
+ return Math.min(pointTriangleDistance(l.p,t.a,t.b,t.c),...[[t.a,t.b],[t.b,t.c],[t.c,t.a]].map(([a,b])=>lineSegmentDistance(l,lineFromPoints(a,b))))
+}
+const pointInTriangle=(p:Vec3,a:Vec3,b:Vec3,c:Vec3):boolean=>{
+ const v0=sub(b,a),v1=sub(c,a),v2=sub(p,a),d00=dot(v0,v0),d01=dot(v0,v1),d11=dot(v1,v1),d20=dot(v2,v0),d21=dot(v2,v1),den=d00*d11-d01*d01,v=(d11*d20-d01*d21)/den,w=(d00*d21-d01*d20)/den
+ return v>=-EPS&&w>=-EPS&&v+w<=1+EPS
+}
+const lineSegmentDistance=(l:Line,s:Line):number=>{
+ const r=lineRelation(l,s);if(r.kind==='intersect'||r.kind==='coincident')return 0
+ const q0=closestPointOnSegment(l.p,s),q1=closestPointOnSegment(add(l.p,l.v),s)
+ const t0=pointLineProjection(s.p,l),t1=pointLineProjection(add(s.p,s.v),l)
+ return Math.min(distance(l.p,q0),distance(add(l.p,l.v),q1),distance(s.p,t0),distance(add(s.p,s.v),t1))
+}
+const segmentTriangleDistance=(s:Line,t:{a:Vec3;b:Vec3;c:Vec3}):number=>{
+ const n=cross(sub(t.b,t.a),sub(t.c,t.a)),hit=linePlaneRelation(s,{n,d:dot(n,t.a)})
+ if(hit.point&&dot(sub(hit.point,s.p),s.v)>=-EPS&&dot(sub(hit.point,s.p),s.v)<=dot(s.v,s.v)+EPS&&pointInTriangle(hit.point,t.a,t.b,t.c))return 0
+ return Math.min(pointTriangleDistance(s.p,t.a,t.b,t.c),pointTriangleDistance(add(s.p,s.v),t.a,t.b,t.c),...[ [t.a,t.b],[t.b,t.c],[t.c,t.a] ].map(([a,b])=>segmentDistance(s,lineFromPoints(a,b))))
+}
+const segmentPlaneDistance=(l:Line,p:Plane):number=>{const r=linePlaneRelation(l,p);return r.kind==='intersect'?0:Math.min(pointPlaneDistance(l.p,p),pointPlaneDistance(add(l.p,l.v),p))}
+const segmentDistance=(a:Line,b:Line):number=>{
+ const candidates=[distance(a.p,closestPointOnSegment(a.p,b)),distance(add(a.p,a.v),closestPointOnSegment(add(a.p,a.v),b)),distance(b.p,closestPointOnSegment(b.p,a)),distance(add(b.p,b.v),closestPointOnSegment(add(b.p,b.v),a))]
+ if(segmentPlaneDistance(a,{n:cross(a.v,b.v),d:dot(cross(a.v,b.v),b.p)})<EPS&&norm(cross(a.v,b.v))>EPS)return 0
+ if(norm(cross(a.v,b.v))<EPS&&norm(cross(sub(b.p,a.p),a.v))<EPS)return 0
+ return Math.min(...candidates)
+}
 export const midpoint=(a:Vec3,b:Vec3):Vec3=>scale(add(a,b),.5)
 export function triangleGeometry(a:Vec3,b:Vec3,c:Vec3){const metrics=triangleMetrics(a,b,c),ab=sub(b,a),ac=sub(c,a),bc=sub(c,b),sideA=norm(bc),sideB=norm(ac),sideC=norm(ab),incenter=scale(add(add(scale(a,sideA),scale(b,sideB)),scale(c,sideC)),1/(sideA+sideB+sideC)),inradius=2*metrics.area/metrics.perimeter;
  const circumcenter=(()=>{const u=ab,v=ac,n=metrics.normal,rhs1=(dot(b,b)-dot(a,a))/2,rhs2=(dot(c,c)-dot(a,a))/2,nrhs=dot(n,a),n2=dot(n,n),w1=cross(v,n),w2=cross(n,u),w3=n;return scale(add(add(scale(w1,rhs1),scale(w2,rhs2)),scale(w3,nrhs)),1/(n2*n2))})(),circumradius=norm(sub(circumcenter,a));

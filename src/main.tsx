@@ -1483,15 +1483,23 @@ function App() {
       b = checkableItems.find((o) => o.id === relation.b);
     if (!a || !b) return "";
     try {
-      const res = calculate(a, b, language);
-      return `${res.title}: ${res.value}`;
+      const distance = G.objectDistance(a, b);
+      const distanceText = copy("Distance", "Távolság", language);
+      let relationText = "";
+      try {
+        const res = calculate(a, b, language);
+        relationText = `${res.title}: ${res.value}\n`;
+      } catch {
+        // Distance is useful even when the relation checker has no other analysis for this pair.
+      }
+      return `${relationText}${distanceText}: ${Number(distance.toFixed(settings.precision))}`;
     } catch (err: any) {
       return (
         err?.message ||
         copy("Comparison not supported", "Nem összehasonlítható", language)
       );
     }
-  }, [relation, checkableItems, language]);
+  }, [relation, checkableItems, language, settings.precision]);
   const createCenterPoint = (
     centerType: "centroid" | "orthocenter" | "circumcenter" | "incenter",
     coord: Vec3,
