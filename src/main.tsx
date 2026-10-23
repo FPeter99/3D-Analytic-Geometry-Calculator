@@ -46,6 +46,7 @@ import {
   defaultSettings,
 } from "./components/SettingsModal";
 import { calculate } from "./math/calculator";
+import { CurveInspector } from "./components/CurveInspector";
 import tergeoPreset from "./tergeo.json";
 import "./style.css";
 type Kind =
@@ -56,7 +57,8 @@ type Kind =
   | "plane"
   | "triangle"
   | "sphere"
-  | "circle";
+  | "circle"
+  | "curve";
 type Obj = {
   id: string;
   name: string;
@@ -87,6 +89,7 @@ const copy = (en: string, hu: string, l: Language) => (l === "en" ? en : hu),
     triangle: "#56c7a5",
     sphere: "#ff8b65",
     circle: "#54d2e8",
+    curve: "#a78bfa",
   },
   vec = (a: any): Vec3 => [+a[0] || 0, +a[1] || 0, +a[2] || 0],
   fmt = (n: number, p = currentPrecision) => Number(n.toFixed(p)).toString(),
@@ -368,6 +371,12 @@ function App() {
         return seed;
       }
     }),
+    [cameraByWorksheet, setCameraByWorksheet] = useState<Record<string, {position:Vec3;target:Vec3}>>(() => { try { return JSON.parse(localStorage.getItem("tergeo-camera-by-worksheet") || "{}"); } catch { return {}; } }),
+    [worksheets, setWorksheets] = useState<{ id: string; name: string; state: State }[]>(() => {
+      try { const saved = localStorage.getItem("tergeo-worksheets"); if (saved) return JSON.parse(saved); } catch {}
+      return [{ id: "sheet-1", name: "Munkalap 1", state: (() => { try { const s = localStorage.getItem("tergeo-session"); return s ? JSON.parse(s) : seed; } catch { return seed; } })() }];
+    }),
+    [activeWorksheetId, setActiveWorksheetId] = useState(() => localStorage.getItem("tergeo-active-worksheet") || "sheet-1"),
     [form, setForm] = useState<Kind | null>(null),
     [theme, setTheme] = useState<"dark" | "light">("dark"),
     [showGrid, setShowGrid] = useState(true),
@@ -393,7 +402,7 @@ function App() {
       localStorage.getItem("tergeo-language") === "hu" ? "hu" : "en",
     ),
     [selectedPoints, setSelectedPoints] = useState<SelectedPointEntry[]>([]),
-    [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(
+    [contextMenu, setContextMenu] = useState<{ x: number; y: number; objectId?: string } | null>(
       null,
     ),
     [formPt1, setFormPt1] = useState<PointPickVal>({
@@ -417,6 +426,16 @@ function App() {
       "points",
     ),
     [formRadius, setFormRadius] = useState<number>(2),
+    [curveKind, setCurveKind] = useState<G.ParametricCurve['kind']>('parabola'),
+    [curveCenter, setCurveCenter] = useState<Vec3>([0, 0, 0]),
+    [curveVec1, setCurveVec1] = useState<Vec3>([0, 1, 0]),
+    [curveVec2, setCurveVec2] = useState<Vec3>([1, 0, 0]),
+    [curveVec3, setCurveVec3] = useState<Vec3>([2, 0, 0]),
+    [curveNum1, setCurveNum1] = useState<number>(1),
+    [curveNum2, setCurveNum2] = useState<number>(2),
+    [curveTMin, setCurveTMin] = useState<number>(-3),
+    [curveTMax, setCurveTMax] = useState<number>(3),
+    [curvePitch, setCurvePitch] = useState('2'),
     [formDirVec, setFormDirVec] = useState<Vec3>([1, 0, 0]),
     [formNormalVec, setFormNormalVec] = useState<Vec3>([0, 1, 0]),
     [settingsOpen, setSettingsOpen] = useState(false),
@@ -441,7 +460,8 @@ function App() {
     toastTimer = useRef<any>(null),
     selectedRef = useRef<Obj | null>(null),
     stepRef = useRef(moveStep),
-    pointVisualUpdaterRef = useRef<(() => void) | null>(null);
+    pointVisualUpdaterRef = useRef<(() => void) | null>(null),
+    hoverCurveParameter = useRef<{id:string;t:number}|null>(null);
   const objects = useMemo(() => derive(state.objects), [state.objects]),
     selected = objects.find((o) => o.id === state.selected) || null;
   selectedRef.current = selected;
@@ -750,7 +770,24 @@ function App() {
     select = (id: string | null) => setState((s) => ({ ...s, selected: id }));
   useEffect(() => {
     localStorage.setItem("tergeo-session", JSON.stringify(state));
+    setWorksheets(current => current.map(sheet => sheet.id === activeWorksheetId ? { ...sheet, state } : sheet));
   }, [state]);
+  useEffect(() => { localStorage.setItem("tergeo-worksheets", JSON.stringify(worksheets)); }, [worksheets]);
+  useEffect(() => { localStorage.setItem("tergeo-active-worksheet", activeWorksheetId); }, [activeWorksheetId]);
+  useEffect(() => { localStorage.setItem("tergeo-camera-by-worksheet", JSON.stringify(cameraByWorksheet)); }, [cameraByWorksheet]);
+  const switchWorksheet = (id: string) => {
+    const target = worksheets.find(sheet => sheet.id === id); if (!target) return;
+    const engineNow = engine.current;
+    if (engineNow) setCameraByWorksheet(current => ({ ...current, [activeWorksheetId]: { position: engineNow.camera.position.toArray() as Vec3, target: engineNow.controls.target.toArray() as Vec3 } }));
+    setWorksheets(current => current.map(sheet => sheet.id === activeWorksheetId ? { ...sheet, state } : sheet));
+    setActiveWorksheetId(id); setState(target.state); setUndoStack([]); setRedoStack([]); setRelation(null); setForm(null);
+  };
+  const newWorksheet = () => {
+    const id = uid(), next = { id, name: `Munkalap ${worksheets.length + 1}`, state: { objects: [], selected: null } as State };
+    setCameraByWorksheet(current => ({ ...current, [activeWorksheetId]: engine.current ? { position: engine.current.camera.position.toArray() as Vec3, target: engine.current.controls.target.toArray() as Vec3 } : cameraMemory.current }));
+    setWorksheets(current => [...current.map(sheet => sheet.id === activeWorksheetId ? { ...sheet, state } : sheet), next]);
+    setActiveWorksheetId(id); setState(next.state); setUndoStack([]); setRedoStack([]); setRelation(null); setForm(null);
+  };
   useEffect(() => {
     localStorage.setItem("tergeo-language", language);
   }, [language]);
@@ -802,6 +839,7 @@ function App() {
           triangle: "T",
           sphere: "G",
           circle: "C",
+          curve: "γ",
         },
         obj: Obj = {
           id: uid(),
@@ -1182,6 +1220,8 @@ function App() {
           return copy("triangle", "háromszög", language);
         case "sphere":
           return copy("sphere", "gömb", language);
+        case "curve":
+          return copy("3D curve", "3D görbe", language);
         case "circle":
           return copy("circle", "kör", language);
         default:
@@ -1561,6 +1601,11 @@ function App() {
       ),
     );
   };
+  const createCurveTangent = (obj: Obj, t: number) => {
+    const result = G.parametricCurveTangent(obj.data.curve as G.ParametricCurve, t);
+    add("line", result.line, "direction", undefined, `${obj.name} tangent`);
+    add("point", { p: result.point }, undefined, undefined, `${obj.name} contact`);
+  };
   const createCircleFromTriangle = (
     circleType: "circumcircle" | "incircle",
     circleData: { center: Vec3; radius: number; normal: Vec3 },
@@ -1623,6 +1668,11 @@ function App() {
     }
     const obj = objects.find((o) => o.id === id);
     if (!obj) return null;
+    if (obj.kind === "curve") {
+      const t = hoverCurveParameter.current?.id === id ? hoverCurveParameter.current.t : obj.data.curve.tMin;
+      const p = G.evaluateParametricCurve(obj.data.curve, t);
+      return { title: `${obj.name} (${copy("Parametric curve", "Paraméteres görbe", language)})`, desc: `t = ${fmt(t)} · P = ${vecText(p)}`, equation: `γ(t) = ${obj.data.curve.kind}` };
+    }
     if (obj.kind === "triangle") {
       try {
         const z = triangleAnalysis({
@@ -1841,7 +1891,8 @@ function App() {
       0.1,
       settings.renderDistance === 0 ? 1e9 : settings.renderDistance,
     );
-    camera.position.set(...cameraMemory.current.position);
+    const worksheetCamera = cameraByWorksheet[activeWorksheetId] || cameraMemory.current;
+    camera.position.set(...worksheetCamera.position);
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       logarithmicDepthBuffer: true,
@@ -1874,10 +1925,12 @@ function App() {
       controls.target.copy(camera.position).addScaledVector(forward, dist);
       camera.lookAt(controls.target);
       controls.update();
+      if (Math.random() < 0.04) setCameraByWorksheet(current => ({ ...current, [activeWorksheetId]: { position: camera.position.toArray() as Vec3, target: controls.target.toArray() as Vec3 } }));
       cameraMemory.current = {
         position: camera.position.toArray() as Vec3,
         target: controls.target.toArray() as Vec3,
       };
+      setCameraByWorksheet(current => ({ ...current, [activeWorksheetId]: cameraMemory.current }));
     };
     const heldKeys = new Set<string>();
     let previousFrame = performance.now();
@@ -1973,7 +2026,7 @@ function App() {
       },
       { passive: false },
     );
-    controls.target.set(...cameraMemory.current.target);
+      controls.target.set(...worksheetCamera.target);
     const grid = new THREE.GridHelper(
       settings.gridSize,
       settings.gridSize,
@@ -2138,7 +2191,15 @@ function App() {
       if (!o.visible) continue;
       const c = new THREE.Color(o.color),
         d = o.data;
-      if (o.kind === "point") addPoint(d.p, c, o.id);
+      if (o.kind === "curve") {
+        const samples = 200, pts: THREE.Vector3[] = [];
+        for (let i = 0; i <= samples; i++) {
+          const t = d.curve.tMin + (d.curve.tMax - d.curve.tMin) * i / samples;
+          pts.push(new THREE.Vector3(...G.evaluateParametricCurve(d.curve, t)));
+        }
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: c, linewidth: 2 }));
+      line.userData = { id: o.id, role: "curve", isParametricCurve: true }; group.add(line);
+      } else if (o.kind === "point") addPoint(d.p, c, o.id);
       else if (o.kind === "vector") {
         const v = vec(d.v),
           start = vec(d.start || [0, 0, 0]);
@@ -2817,6 +2878,20 @@ function App() {
         let node: any = hits[0].object;
         while (node && !node.userData.id) node = node.parent;
         if (node?.userData.id) {
+          if (node.userData.isParametricCurve) {
+            const curveObj = objects.find(o => o.id === node.userData.id);
+            if (curveObj?.kind === "curve") {
+              let best = { distance: Infinity, t: curveObj.data.curve.tMin, point: new THREE.Vector3() };
+              for (let i=0;i<=400;i++) {
+                const t=curveObj.data.curve.tMin+(curveObj.data.curve.tMax-curveObj.data.curve.tMin)*i/400;
+                const point=new THREE.Vector3(...G.evaluateParametricCurve(curveObj.data.curve,t));
+                const projected=point.clone().project(camera), sx=r0.left+(projected.x+1)*r0.width/2, sy=r0.top+(1-projected.y)*r0.height/2;
+                const distance=Math.hypot(sx-e.clientX,sy-e.clientY);
+                if(distance<best.distance) best={distance,t,point};
+              }
+              if(best.distance<=28){ hoverCurveParameter.current={id:curveObj.id,t:best.t}; const info=getTooltip(curveObj.id,"curve"); if(info){setHoverInfo({x:e.clientX+14,y:e.clientY+14,...info});return;} }
+            }
+          }
           const info = getTooltip(node.userData.id, node.userData.role);
           if (info) {
             setHoverInfo({ x: e.clientX, y: e.clientY, ...info });
@@ -2871,7 +2946,7 @@ function App() {
       if (engine.current?.renderer === renderer) engine.current = null;
       pointVisualUpdaterRef.current = null;
     };
-  }, [objects, analyses, theme, settings]);
+  }, [objects, analyses, theme, settings, activeWorksheetId]);
   useEffect(() => {
     if (engine.current) {
       engine.current.grid.visible = showGrid;
@@ -2975,9 +3050,9 @@ function App() {
     };
   const eq = (o: Obj) => {
     const d = o.data;
-    if (o.kind === "point") return `${o.name} ${vecText(d.p)}`;
-    if (o.kind === "vector") return `v ${vecText(d.v)}`;
-    if (o.kind === "line") return `r=${vecText(d.p)}+t${vecText(d.v)}`;
+    if (o.kind === "point") return `\\(${o.name}=(${d.p.map(fmt).join(",\\, ")})\\)`;
+    if (o.kind === "vector") return `\\(\\mathbf v=(${d.v.map(fmt).join(",\\, ")})\\)`;
+    if (o.kind === "line") return `\\(\\mathbf r=${vecText(d.p)}+t${vecText(d.v)}\\)`;
     if (o.kind === "plane")
       return `${fmt(d.n[0])}x+${fmt(d.n[1])}y+${fmt(d.n[2])}z=${fmt(d.d)}`;
     if (o.kind === "segment") return `${vecText(d.p)} → ${vecText(d.q)}`;
@@ -2986,11 +3061,12 @@ function App() {
     if (o.kind === "sphere")
       return `C ${vecText(d.center)} · r=${fmt(d.radius)}`;
     if (o.kind === "circle")
-      return `C ${vecText(d.center)} · r=${fmt(d.radius)} · n=${vecText(d.normal)}`;
+      return `\\(\\|\\mathbf x-${vecText(d.center)}\\|=${fmt(d.radius)}\\)`;
+    if (o.kind === "curve") return `\\(\\boldsymbol{\\gamma}(t)=\\text{${d.curve.kind}},\\quad t\\in[${fmt(d.curve.tMin)},${fmt(d.curve.tMax)}]\\)`;
     return "";
   };
   return (
-    <div className={`app ${theme}`}>
+    <div className={`app ${theme}`} onClick={() => contextMenu && setContextMenu(null)}>
       <header className="topbar">
         <div className="brand">
           <div className="brand-icon">
@@ -3051,6 +3127,10 @@ function App() {
           </Button>
         </div>
       </header>
+        <nav className="worksheet-tabs" aria-label={copy("Worksheets", "Munkalapok", language)}>
+          {worksheets.map(sheet => <button key={sheet.id} className={sheet.id === activeWorksheetId ? "active" : ""} onClick={() => switchWorksheet(sheet.id)}>{sheet.name}</button>)}
+          <button className="worksheet-add" onClick={newWorksheet} aria-label={copy("New worksheet", "Új munkalap", language)}><Plus size={15}/></button>
+        </nav>
         <div className={`workspace ${selected ? "has-inspector" : ""}`}>
         <aside className="sidebar">
           <div className="section-head">
@@ -3088,6 +3168,7 @@ function App() {
               <div
                 key={o.id}
                 className={`object-row ${selected?.id === o.id ? "chosen" : ""} ${o.kind === "point" && selectedPoints.some((sp) => sp.key === o.id || sp.key === `${o.id}__point`) ? "multi-selected" : ""}`}
+                onContextMenu={(e) => { e.preventDefault(); select(o.id); setContextMenu({ x: e.clientX, y: e.clientY, objectId: o.id }); }}
                 onClick={(e) => {
                   if (e.ctrlKey && o.kind === "point" && o.data?.p) {
                     const keyToToggle = o.id;
@@ -3147,7 +3228,7 @@ function App() {
                                   ? "Sphere"
                                   : o.kind === "vector"
                                     ? "Vector"
-                                    : "Segment",
+                                    : o.kind === "curve" ? "Parametric curve" : "Segment",
                         o.kind === "triangle"
                           ? "Háromszög"
                           : o.kind === "point"
@@ -3160,7 +3241,7 @@ function App() {
                                   ? "Gömb"
                                   : o.kind === "vector"
                                     ? "Vektor"
-                                    : "Szakasz",
+                                    : o.kind === "curve" ? "Paraméteres görbe" : "Szakasz",
                         language,
                       )}
                     </small>
@@ -3208,6 +3289,7 @@ function App() {
                 "plane",
                 "triangle",
                 "circle",
+                "curve",
                 "sphere",
               ] as Kind[]
             ).map((k) => (
@@ -3246,7 +3328,7 @@ function App() {
                               ? "Triangle"
                               : k === "circle"
                                 ? "Circle"
-                                : "Sphere",
+                                : k === "curve" ? "Parametric curve" : "Sphere",
                   k === "point"
                     ? "Pont"
                     : k === "vector"
@@ -3259,7 +3341,7 @@ function App() {
                             ? "Sík"
                             : k === "triangle"
                               ? "Háromszög"
-                              : "Gömb",
+                              : k === "curve" ? "Paraméteres görbe" : "Gömb",
                   language,
                 )}
               </button>
@@ -3281,6 +3363,338 @@ function App() {
                   availablePoints={availablePoints}
                   language={language}
                 />
+              )}
+              {form === "curve" && (
+                <div className="workspace-form curve-form">
+                  <label>
+                    {copy("3D Curve Type", "3D Görbetípus", language)}
+                    <select
+                      value={curveKind}
+                      onChange={(e) => {
+                        const k = e.target.value as G.ParametricCurve["kind"];
+                        setCurveKind(k);
+                        if (k === "parabola") {
+                          setCurveCenter([0, 0, 0]);
+                          setCurveVec1([0, 1, 0]);
+                          setCurveVec2([1, 0, 0]);
+                          setCurveNum1(1);
+                          setCurveTMin(-3);
+                          setCurveTMax(3);
+                        } else if (k === "ellipse") {
+                          setCurveCenter([0, 0, 0]);
+                          setCurveVec1([3, 0, 0]);
+                          setCurveVec2([0, 2, 0]);
+                          setCurveTMin(0);
+                          setCurveTMax(6.283);
+                        } else if (k === "helix") {
+                          setCurveCenter([0, 0, 0]);
+                          setCurveVec1([0, 0, 1]);
+                          setCurveNum1(2);
+                          setCurveNum2(2);
+                          setCurveTMin(0);
+                          setCurveTMax(18.85);
+                        } else if (k === "spiral") {
+                          setCurveCenter([0, 0, 0]);
+                          setCurveVec1([0, 0, 1]);
+                          setCurveNum1(0.5);
+                          setCurveNum2(0.2);
+                          setCurvePitch("2");
+                          setCurveTMin(0);
+                          setCurveTMax(18.85);
+                        } else if (k === "line") {
+                          setCurveCenter([-2, 0, 0]);
+                          setCurveVec1([2, 0, 0]);
+                          setCurveTMin(0);
+                          setCurveTMax(1);
+                        } else if (k === "cubic-bezier") {
+                          setCurveCenter([-2, 0, 0]);
+                          setCurveVec1([-1, 3, 1]);
+                          setCurveVec2([1, -3, 1]);
+                          setCurveVec3([2, 0, 0]);
+                          setCurveTMin(0);
+                          setCurveTMax(1);
+                        }
+                      }}
+                    >
+                      <option value="parabola">{copy("3D Parabola", "3D Parabola", language)}</option>
+                      <option value="ellipse">{copy("3D Ellipse", "3D Ellipszis", language)}</option>
+                      <option value="helix">{copy("3D Helix", "3D Csavarvonal", language)}</option>
+                      <option value="spiral">{copy("3D Spiral", "3D Spirál", language)}</option>
+                      <option value="cubic-bezier">{copy("3D Cubic Bézier", "3D Bézier-görbe", language)}</option>
+                      <option value="line">{copy("3D Line Segment", "3D Egyenes szakasz", language)}</option>
+                    </select>
+                  </label>
+
+                  {curveKind === "parabola" && (
+                    <>
+                      <div className="point-input-group">
+                        <label>{copy("Vertex V", "Tengelycsúcs V", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveCenter[0]} onValueChange={(v) => setCurveCenter([v, curveCenter[1], curveCenter[2]])} />
+                          <NumericField value={curveCenter[1]} onValueChange={(v) => setCurveCenter([curveCenter[0], v, curveCenter[2]])} />
+                          <NumericField value={curveCenter[2]} onValueChange={(v) => setCurveCenter([curveCenter[0], curveCenter[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("Axis Direction", "Szimmetriatengely-vektor", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec1[0]} onValueChange={(v) => setCurveVec1([v, curveVec1[1], curveVec1[2]])} />
+                          <NumericField value={curveVec1[1]} onValueChange={(v) => setCurveVec1([curveVec1[0], v, curveVec1[2]])} />
+                          <NumericField value={curveVec1[2]} onValueChange={(v) => setCurveVec1([curveVec1[0], curveVec1[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("Transverse Direction", "Nyílási irányvektor", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec2[0]} onValueChange={(v) => setCurveVec2([v, curveVec2[1], curveVec2[2]])} />
+                          <NumericField value={curveVec2[1]} onValueChange={(v) => setCurveVec2([curveVec2[0], v, curveVec2[2]])} />
+                          <NumericField value={curveVec2[2]} onValueChange={(v) => setCurveVec2([curveVec2[0], curveVec2[1], v])} />
+                        </div>
+                      </div>
+                      <label>
+                        {copy("Focal Parameter p", "Fókuszparaméter p", language)}
+                        <NumericField value={curveNum1} onValueChange={setCurveNum1} />
+                      </label>
+                    </>
+                  )}
+
+                  {curveKind === "ellipse" && (
+                    <>
+                      <div className="point-input-group">
+                        <label>{copy("Center C", "Középpont C", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveCenter[0]} onValueChange={(v) => setCurveCenter([v, curveCenter[1], curveCenter[2]])} />
+                          <NumericField value={curveCenter[1]} onValueChange={(v) => setCurveCenter([curveCenter[0], v, curveCenter[2]])} />
+                          <NumericField value={curveCenter[2]} onValueChange={(v) => setCurveCenter([curveCenter[0], curveCenter[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("Semi-major Axis Vector a", "Főtengely-vektor a", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec1[0]} onValueChange={(v) => setCurveVec1([v, curveVec1[1], curveVec1[2]])} />
+                          <NumericField value={curveVec1[1]} onValueChange={(v) => setCurveVec1([curveVec1[0], v, curveVec1[2]])} />
+                          <NumericField value={curveVec1[2]} onValueChange={(v) => setCurveVec1([curveVec1[0], curveVec1[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("Semi-minor Axis Vector b", "Melléktengely-vektor b", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec2[0]} onValueChange={(v) => setCurveVec2([v, curveVec2[1], curveVec2[2]])} />
+                          <NumericField value={curveVec2[1]} onValueChange={(v) => setCurveVec2([curveVec2[0], v, curveVec2[2]])} />
+                          <NumericField value={curveVec2[2]} onValueChange={(v) => setCurveVec2([curveVec2[0], curveVec2[1], v])} />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {curveKind === "helix" && (
+                    <>
+                      <div className="point-input-group">
+                        <label>{copy("Center C", "Középpont C", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveCenter[0]} onValueChange={(v) => setCurveCenter([v, curveCenter[1], curveCenter[2]])} />
+                          <NumericField value={curveCenter[1]} onValueChange={(v) => setCurveCenter([curveCenter[0], v, curveCenter[2]])} />
+                          <NumericField value={curveCenter[2]} onValueChange={(v) => setCurveCenter([curveCenter[0], curveCenter[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("Axis Normal Vector n", "Tengely normálvektora n", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec1[0]} onValueChange={(v) => setCurveVec1([v, curveVec1[1], curveVec1[2]])} />
+                          <NumericField value={curveVec1[1]} onValueChange={(v) => setCurveVec1([curveVec1[0], v, curveVec1[2]])} />
+                          <NumericField value={curveVec1[2]} onValueChange={(v) => setCurveVec1([curveVec1[0], curveVec1[1], v])} />
+                        </div>
+                      </div>
+                      <label>
+                        {copy("Radius r", "Sugár r", language)}
+                        <NumericField value={curveNum1} onValueChange={setCurveNum1} />
+                      </label>
+                      <label>
+                        {copy("Pitch h", "Emelkedés h", language)}
+                        <NumericField value={curveNum2} onValueChange={setCurveNum2} />
+                      </label>
+                    </>
+                  )}
+
+                  {curveKind === "spiral" && (
+                    <>
+                      <div className="point-input-group">
+                        <label>{copy("Center C", "Középpont C", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveCenter[0]} onValueChange={(v) => setCurveCenter([v, curveCenter[1], curveCenter[2]])} />
+                          <NumericField value={curveCenter[1]} onValueChange={(v) => setCurveCenter([curveCenter[0], v, curveCenter[2]])} />
+                          <NumericField value={curveCenter[2]} onValueChange={(v) => setCurveCenter([curveCenter[0], curveCenter[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("Axis Normal Vector n", "Tengely normálvektora n", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec1[0]} onValueChange={(v) => setCurveVec1([v, curveVec1[1], curveVec1[2]])} />
+                          <NumericField value={curveVec1[1]} onValueChange={(v) => setCurveVec1([curveVec1[0], v, curveVec1[2]])} />
+                          <NumericField value={curveVec1[2]} onValueChange={(v) => setCurveVec1([curveVec1[0], curveVec1[1], v])} />
+                        </div>
+                      </div>
+                      <label>
+                        {copy("Initial Radius r", "Kezdősugár r", language)}
+                        <NumericField value={curveNum1} onValueChange={setCurveNum1} />
+                      </label>
+                      <label>
+                        {copy("Growth Rate k", "Növekedési ütem k", language)}
+                        <NumericField value={curveNum2} onValueChange={setCurveNum2} />
+                      </label>
+                      <label>
+                        {copy("Pitch h", "Emelkedés h", language)}
+                        <NumericField value={Number(curvePitch)} onValueChange={(v) => setCurvePitch(String(v))} />
+                      </label>
+                    </>
+                  )}
+
+                  {curveKind === "line" && (
+                    <>
+                      <div className="point-input-group">
+                        <label>{copy("Start Point P₀", "Kezdőpont P₀", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveCenter[0]} onValueChange={(v) => setCurveCenter([v, curveCenter[1], curveCenter[2]])} />
+                          <NumericField value={curveCenter[1]} onValueChange={(v) => setCurveCenter([curveCenter[0], v, curveCenter[2]])} />
+                          <NumericField value={curveCenter[2]} onValueChange={(v) => setCurveCenter([curveCenter[0], curveCenter[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("End Point P₁", "Végpont P₁", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec1[0]} onValueChange={(v) => setCurveVec1([v, curveVec1[1], curveVec1[2]])} />
+                          <NumericField value={curveVec1[1]} onValueChange={(v) => setCurveVec1([curveVec1[0], v, curveVec1[2]])} />
+                          <NumericField value={curveVec1[2]} onValueChange={(v) => setCurveVec1([curveVec1[0], curveVec1[1], v])} />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {curveKind === "cubic-bezier" && (
+                    <>
+                      <div className="point-input-group">
+                        <label>{copy("P₀", "P₀", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveCenter[0]} onValueChange={(v) => setCurveCenter([v, curveCenter[1], curveCenter[2]])} />
+                          <NumericField value={curveCenter[1]} onValueChange={(v) => setCurveCenter([curveCenter[0], v, curveCenter[2]])} />
+                          <NumericField value={curveCenter[2]} onValueChange={(v) => setCurveCenter([curveCenter[0], curveCenter[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("P₁", "P₁", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec1[0]} onValueChange={(v) => setCurveVec1([v, curveVec1[1], curveVec1[2]])} />
+                          <NumericField value={curveVec1[1]} onValueChange={(v) => setCurveVec1([curveVec1[0], v, curveVec1[2]])} />
+                          <NumericField value={curveVec1[2]} onValueChange={(v) => setCurveVec1([curveVec1[0], curveVec1[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("P₂", "P₂", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec2[0]} onValueChange={(v) => setCurveVec2([v, curveVec2[1], curveVec2[2]])} />
+                          <NumericField value={curveVec2[1]} onValueChange={(v) => setCurveVec2([curveVec2[0], v, curveVec2[2]])} />
+                          <NumericField value={curveVec2[2]} onValueChange={(v) => setCurveVec2([curveVec2[0], curveVec2[1], v])} />
+                        </div>
+                      </div>
+                      <div className="point-input-group">
+                        <label>{copy("P₃", "P₃", language)}</label>
+                        <div className="coord-row">
+                          <NumericField value={curveVec3[0]} onValueChange={(v) => setCurveVec3([v, curveVec3[1], curveVec3[2]])} />
+                          <NumericField value={curveVec3[1]} onValueChange={(v) => setCurveVec3([curveVec3[0], v, curveVec3[2]])} />
+                          <NumericField value={curveVec3[2]} onValueChange={(v) => setCurveVec3([curveVec3[0], curveVec3[1], v])} />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <label style={{ flex: 1 }}>
+                      {copy("t Min", "t Min", language)}
+                      <NumericField value={curveTMin} onValueChange={setCurveTMin} />
+                    </label>
+                    <label style={{ flex: 1 }}>
+                      {copy("t Max", "t Max", language)}
+                      <NumericField value={curveTMax} onValueChange={setCurveTMax} />
+                    </label>
+                  </div>
+
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      try {
+                        let curve: G.ParametricCurve;
+                        if (curveKind === "parabola") {
+                          curve = {
+                            kind: "parabola",
+                            vertex: curveCenter,
+                            axis: curveVec1,
+                            transverse: curveVec2,
+                            p: curveNum1,
+                            tMin: curveTMin,
+                            tMax: curveTMax,
+                          };
+                        } else if (curveKind === "ellipse") {
+                          curve = {
+                            kind: "ellipse",
+                            center: curveCenter,
+                            semiMajor: curveVec1,
+                            semiMinor: curveVec2,
+                            tMin: curveTMin,
+                            tMax: curveTMax,
+                          };
+                        } else if (curveKind === "helix") {
+                          curve = {
+                            kind: "helix",
+                            center: curveCenter,
+                            normal: curveVec1,
+                            radius: curveNum1,
+                            pitch: curveNum2,
+                            tMin: curveTMin,
+                            tMax: curveTMax,
+                          };
+                        } else if (curveKind === "spiral") {
+                          curve = {
+                            kind: "spiral",
+                            center: curveCenter,
+                            normal: curveVec1,
+                            radius: curveNum1,
+                            growth: curveNum2,
+                            pitch: Number(curvePitch),
+                            tMin: curveTMin,
+                            tMax: curveTMax,
+                          };
+                        } else if (curveKind === "line") {
+                          curve = {
+                            kind: "line",
+                            points: [curveCenter, curveVec1],
+                            tMin: curveTMin,
+                            tMax: curveTMax,
+                          };
+                        } else {
+                          curve = {
+                            kind: "cubic-bezier",
+                            points: [curveCenter, curveVec1, curveVec2, curveVec3],
+                            tMin: curveTMin,
+                            tMax: curveTMax,
+                          };
+                        }
+                        G.validateParametricCurve(curve);
+                        add("curve", { curve });
+                      } catch (e: any) {
+                        notify(
+                          e?.message ||
+                            copy(
+                              "Failed to create 3D curve",
+                              "Hiba a 3D görbe létrehozásakor",
+                              language,
+                            ),
+                        );
+                      }
+                    }}
+                  >
+                    {copy("Create 3D Curve", "3D Görbe létrehozása", language)}
+                  </button>
+                </div>
               )}
 
               {form === "line" && (
@@ -3892,7 +4306,7 @@ function App() {
             {relationMessage && (
               <div className="relation-result">
                 <Check size={14} />
-                {relationMessage}
+                <span>{String(relationMessage).split("\n").map((line: string, index: number) => <React.Fragment key={index}>{index > 0 && <br/>}{`\\(${line.replace(/([\d.]+)$/, "\\\\;" + "$1") }\\)`}</React.Fragment>)}</span>
               </div>
             )}
           </div>
@@ -3958,7 +4372,7 @@ function App() {
         </main>
           {selected && (
           <aside className="right-inspector-stack">
-              <Inspector
+              {selected.kind === "curve" ? <CurveInspector object={selected} createTangent={createCurveTangent} language={language} notify={notify} /> : <Inspector
               object={selected}
               update={(d) => update(selected.id, d)}
               meta={(k, v) => meta(selected.id, k, v)}
@@ -3991,7 +4405,7 @@ function App() {
               setMoveStep={setMoveStep}
               language={language}
                 notify={notify}
-              />
+              />}
               {selectedSubItem && (
                 <SubConstructionInspector
                   parent={selectedSubObject || selected}
@@ -4065,6 +4479,12 @@ function App() {
             {copy("CONSTRUCTION", "SZERKESZTÉS", language)} (
             {selectedPoints.length} {copy("pts", "pont", language)})
           </div>
+          {contextMenu.objectId && <button type="button" className="geom-context-item" onClick={() => {
+            const source = state.objects.find(item => item.id === contextMenu.objectId);
+            if (!source) return;
+            const duplicate: Obj = { ...structuredClone(source), id: uid(), name: `${source.name} copy`, visible: true, parentIds: undefined, data: structuredClone(source.data) };
+            commit(s => ({ ...s, objects: [...s.objects, duplicate], selected: duplicate.id })); setContextMenu(null);
+          }}><Copy size={14} />{copy("Duplicate object", "Objektum duplikálása", language)}</button>}
           {selectedPoints.length === 1 && (
             <button
               type="button"

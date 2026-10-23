@@ -2,6 +2,15 @@ export type Vec3 = [number, number, number]
 export type Line = { p: Vec3; v: Vec3 }
 export type Plane = { n: Vec3; d: number }
 export type Circle = { center: Vec3; radius: number; normal: Vec3; basis: [Vec3, Vec3] }
+export type ParametricCurve =
+  | { kind: 'line'; points: [Vec3, Vec3]; tMin: number; tMax: number }
+  | { kind: 'cubic-bezier'; points: [Vec3, Vec3, Vec3, Vec3]; tMin: number; tMax: number }
+  | { kind: 'helix'; center: Vec3; radius: number; pitch: number; normal: Vec3; tMin: number; tMax: number }
+  | { kind: 'parabola'; vertex: Vec3; axis: Vec3; transverse: Vec3; p: number; tMin: number; tMax: number }
+  | { kind: 'ellipse'; center: Vec3; semiMajor: Vec3; semiMinor: Vec3; tMin: number; tMax: number }
+  | { kind: 'spiral'; center: Vec3; radius: number; growth: number; pitch: number; normal: Vec3; tMin: number; tMax: number }
+
+export type ParametricCurveTangent = { point: Vec3; tangent: Vec3; line: Line }
 export const EPS = 1e-9
 export const add = (a: Vec3, b: Vec3): Vec3 => [a[0]+b[0],a[1]+b[1],a[2]+b[2]]
 export const sub = (a: Vec3, b: Vec3): Vec3 => [a[0]-b[0],a[1]-b[1],a[2]-b[2]]
@@ -24,6 +33,123 @@ export const circumcircleFromPoints = (a: Vec3,b: Vec3,c: Vec3): Circle => {
  return circleFromCenterRadiusNormal(center,distance(center,a),n)
 }
 export const circlePoint = (circle: Circle,t: number): Vec3 => add(circle.center,scale(add(scale(circle.basis[0],Math.cos(t)),scale(circle.basis[1],Math.sin(t))),circle.radius))
+
+export function curveBasis(normal: Vec3): [Vec3, Vec3] {
+ const n = normalize(normal)
+ const ref: Vec3 = Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [0, 1, 0]
+ const u = normalize(cross(ref, n))
+ const v = cross(n, u)
+ return [u, v]
+}
+
+export function validateParametricCurve(curve: ParametricCurve): void {
+ if (!Number.isFinite(curve.tMin) || !Number.isFinite(curve.tMax) || curve.tMin >= curve.tMax)
+  throw new Error('Require finite bounds with tMin < tMax.')
+ if (curve.kind === 'line') {
+  if (curve.points.length !== 2 || curve.points.some(p => p.length !== 3 || p.some(n => !Number.isFinite(n))))
+   throw new Error('Invalid points for 3D line.')
+ } else if (curve.kind === 'cubic-bezier') {
+  if (curve.points.length !== 4 || curve.points.some(p => p.length !== 3 || p.some(n => !Number.isFinite(n))))
+   throw new Error('Invalid control points for 3D cubic Bézier.')
+ } else if (curve.kind === 'helix') {
+  if (curve.radius <= 0 || !Number.isFinite(curve.radius) || !Number.isFinite(curve.pitch) || norm(curve.normal) < EPS)
+   throw new Error('3D Helix requires positive radius, finite pitch and valid normal.')
+ } else if (curve.kind === 'parabola') {
+  if (curve.p <= 0 || !Number.isFinite(curve.p) || norm(curve.axis) < EPS || norm(curve.transverse) < EPS)
+   throw new Error('3D Parabola requires positive focal parameter p and non-zero direction vectors.')
+ } else if (curve.kind === 'ellipse') {
+  if (norm(curve.semiMajor) < EPS || norm(curve.semiMinor) < EPS)
+   throw new Error('3D Ellipse requires non-zero semi-axis vectors.')
+ } else if (curve.kind === 'spiral') {
+  if (curve.radius <= 0 || !Number.isFinite(curve.radius) || norm(curve.normal) < EPS)
+   throw new Error('3D Spiral requires positive initial radius and valid normal.')
+ }
+}
+
+export function evaluateParametricCurve(curve: ParametricCurve, t: number): Vec3 {
+ validateParametricCurve(curve)
+ if (!Number.isFinite(t)) throw new Error('Parameter must be finite.')
+ if (curve.kind === 'line') {
+  const dt = curve.tMax - curve.tMin
+  const u = (t - curve.tMin) / dt
+  return add(curve.points[0], scale(sub(curve.points[1], curve.points[0]), u))
+ }
+ if (curve.kind === 'cubic-bezier') {
+  const dt = curve.tMax - curve.tMin
+  const u = (t - curve.tMin) / dt, s = 1 - u
+  const p = curve.points
+  return add(add(scale(p[0], s * s * s), scale(p[1], 3 * s * s * u)), add(scale(p[2], 3 * s * u * u), scale(p[3], u * u * u)))
+ }
+ if (curve.kind === 'helix') {
+  const [u, v] = curveBasis(curve.normal)
+  const n = normalize(curve.normal)
+  const rad = curve.radius, h = curve.pitch
+  return add(add(curve.center, add(scale(u, rad * Math.cos(t)), scale(v, rad * Math.sin(t)))), scale(n, (h * t) / (2 * Math.PI)))
+ }
+ if (curve.kind === 'parabola') {
+  const a = normalize(curve.axis)
+  let b = sub(curve.transverse, scale(a, dot(curve.transverse, a)))
+  if (norm(b) < EPS) throw new Error('Transverse vector must not be parallel to axis.')
+  b = normalize(b)
+  return add(add(curve.vertex, scale(b, t)), scale(a, (t * t) / (4 * curve.p)))
+ }
+ if (curve.kind === 'ellipse') {
+  return add(add(curve.center, scale(curve.semiMajor, Math.cos(t))), scale(curve.semiMinor, Math.sin(t)))
+ }
+ if (curve.kind === 'spiral') {
+  const [u, v] = curveBasis(curve.normal)
+  const n = normalize(curve.normal)
+  const rad = curve.radius + curve.growth * t, h = curve.pitch
+  return add(add(curve.center, add(scale(u, rad * Math.cos(t)), scale(v, rad * Math.sin(t)))), scale(n, (h * t) / (2 * Math.PI)))
+ }
+ throw new Error('Unknown curve kind.')
+}
+
+export function differentiateParametricCurve(curve: ParametricCurve, t: number): Vec3 {
+ validateParametricCurve(curve)
+ if (!Number.isFinite(t)) throw new Error('Parameter must be finite.')
+ if (curve.kind === 'line') {
+  const dt = curve.tMax - curve.tMin
+  return scale(sub(curve.points[1], curve.points[0]), 1 / dt)
+ }
+ if (curve.kind === 'cubic-bezier') {
+  const dt = curve.tMax - curve.tMin
+  const u = (t - curve.tMin) / dt, s = 1 - u
+  const p = curve.points
+  const dp0 = sub(p[1], p[0]), dp1 = sub(p[2], p[1]), dp2 = sub(p[3], p[2])
+  return scale(add(add(scale(dp0, 3 * s * s), scale(dp1, 6 * s * u)), scale(dp2, 3 * u * u)), 1 / dt)
+ }
+ if (curve.kind === 'helix') {
+  const [u, v] = curveBasis(curve.normal)
+  const n = normalize(curve.normal)
+  const rad = curve.radius, h = curve.pitch
+  return add(add(scale(u, -rad * Math.sin(t)), scale(v, rad * Math.cos(t))), scale(n, h / (2 * Math.PI)))
+ }
+ if (curve.kind === 'parabola') {
+  const a = normalize(curve.axis)
+  let b = sub(curve.transverse, scale(a, dot(curve.transverse, a)))
+  b = normalize(b)
+  return add(b, scale(a, t / (2 * curve.p)))
+ }
+ if (curve.kind === 'ellipse') {
+  return add(scale(curve.semiMajor, -Math.sin(t)), scale(curve.semiMinor, Math.cos(t)))
+ }
+ if (curve.kind === 'spiral') {
+  const [u, v] = curveBasis(curve.normal)
+  const n = normalize(curve.normal)
+  const rad = curve.radius + curve.growth * t, k = curve.growth, h = curve.pitch
+  const dRadial = add(scale(u, k * Math.cos(t) - rad * Math.sin(t)), scale(v, k * Math.sin(t) + rad * Math.cos(t)))
+  return add(dRadial, scale(n, h / (2 * Math.PI)))
+ }
+ throw new Error('Unknown curve kind.')
+}
+
+export function parametricCurveTangent(curve: ParametricCurve, t: number): ParametricCurveTangent {
+ const point = evaluateParametricCurve(curve, t), tangent = differentiateParametricCurve(curve, t)
+ if (norm(tangent) < EPS) throw new Error('The curve has no unique tangent at this parameter.')
+ return { point, tangent, line: { p: point, v: tangent } }
+}
+
 export const planeFromPointNormal = (p: Vec3,n: Vec3): Plane => { if(norm(n)<EPS) throw new Error('A normálvektor nem lehet nulla.'); return {n:[...n],d:dot(n,p)} }
 export const planeFromDirections = (p: Vec3,u: Vec3,v: Vec3): Plane => { const n=cross(u,v); if(norm(u)<EPS||norm(v)<EPS||norm(n)<EPS) throw new Error('A két irányvektor nem határoz meg egyértelmű síkot.'); return planeFromPointNormal(p,n) }
 export const lineRelation = (a: Line,b: Line): {kind:string; point?:Vec3; distance?:number; closestA?:Vec3; closestB?:Vec3} => {
@@ -61,7 +187,6 @@ export const triangleMetrics=(a:Vec3,b:Vec3,c:Vec3)=>{const ab=sub(b,a),ac=sub(c
 export const distance=(a:Vec3,b:Vec3)=>norm(sub(a,b))
 /** Minimum Euclidean distance between supported geometric objects. */
 export const objectDistance=(a:{kind:string;data:any},b:{kind:string;data:any}):number=>{
- // A free vector has no unique position; for distance checks treat it as the segment from origin to its endpoint.
  if(a.kind==='vector')a={...a,kind:'segment',data:{p:[0,0,0],q:a.data.v}}
  if(b.kind==='vector')b={...b,kind:'segment',data:{p:[0,0,0],q:b.data.v}}
  const k1=a.kind,k2=b.kind,x=a.data,y=b.data
@@ -102,8 +227,6 @@ export const objectDistance=(a:{kind:string;data:any},b:{kind:string;data:any}):
  if(k1==='line'&&ball(k2))return Math.max(0,pointLineDistance(center(y),line(x))-radius(y))
  if(ball(k1)&&k2==='segment')return Math.max(0,distance(center(x),closestPointOnSegment(center(x),asLine(y)))-radius(x))
  if(k1==='segment'&&ball(k2))return Math.max(0,distance(center(y),closestPointOnSegment(center(y),asLine(x)))-radius(y))
- if(pair('line','sphere')||pair('line','circle')){const o=get(k1==='line'?k2:k1);return Math.max(0,pointLineDistance(center(o),line(get('line')))-radius(o))}
- if(pair('segment','sphere')||pair('segment','circle')){const o=get(k1==='segment'?k2:k1);return Math.max(0,distance(center(o),closestPointOnSegment(center(o),asLine(get('segment'))))-radius(o))}
  throw new Error('Ehhez az objektumpárhoz nem érhető el távolságszámítás.')
 }
 const closestPointOnSegment=(p:Vec3,l:Line):Vec3=>{const t=Math.max(0,Math.min(1,dot(sub(p,l.p),l.v)/dot(l.v,l.v)));return add(l.p,scale(l.v,t))}
@@ -145,7 +268,7 @@ export const midpoint=(a:Vec3,b:Vec3):Vec3=>scale(add(a,b),.5)
 export function triangleGeometry(a:Vec3,b:Vec3,c:Vec3){const metrics=triangleMetrics(a,b,c),ab=sub(b,a),ac=sub(c,a),bc=sub(c,b),sideA=norm(bc),sideB=norm(ac),sideC=norm(ab),incenter=scale(add(add(scale(a,sideA),scale(b,sideB)),scale(c,sideC)),1/(sideA+sideB+sideC)),inradius=2*metrics.area/metrics.perimeter;
  const circumcenter=(()=>{const u=ab,v=ac,n=metrics.normal,rhs1=(dot(b,b)-dot(a,a))/2,rhs2=(dot(c,c)-dot(a,a))/2,nrhs=dot(n,a),n2=dot(n,n),w1=cross(v,n),w2=cross(n,u),w3=n;return scale(add(add(scale(w1,rhs1),scale(w2,rhs2)),scale(w3,nrhs)),1/(n2*n2))})(),circumradius=norm(sub(circumcenter,a));
  const unitAB=normalize(ab),unitAC=normalize(ac),unitBA=normalize(scale(ab,-1)),unitBC=normalize(bc),unitCA=normalize(scale(ac,-1)),unitCB=normalize(scale(bc,-1));
-   const n=metrics.plane.n,bisector=(p:Vec3,u:Vec3,v:Vec3):Line=>({p,v:add(u,v)}),medians=[{p:a,v:sub(metrics.centroid,a)},{p:b,v:sub(metrics.centroid,b)},{p:c,v:sub(metrics.centroid,c)}],altitudes=[{p:a,v:cross(n,bc)},{p:b,v:cross(n,scale(ac,-1))},{p:c,v:cross(n,ab)}],perpendicularBisectors=[{p:midpoint(b,c),v:cross(n,bc)},{p:midpoint(c,a),v:cross(n,scale(ac,-1))},{p:midpoint(a,b),v:cross(n,ab)}],angleBisectors=[bisector(a,unitAB,unitAC),bisector(b,unitBA,unitBC),bisector(c,unitCA,unitCB)],eulerDirection=sub(metrics.orthocenter,circumcenter);
+ const n=metrics.plane.n,bisector=(p:Vec3,u:Vec3,v:Vec3):Line=>({p,v:add(u,v)}),medians=[{p:a,v:sub(metrics.centroid,a)},{p:b,v:sub(metrics.centroid,b)},{p:c,v:sub(metrics.centroid,c)}],altitudes=[{p:a,v:cross(n,bc)},{p:b,v:cross(n,scale(ac,-1))},{p:c,v:cross(n,ab)}],perpendicularBisectors=[{p:midpoint(b,c),v:cross(n,bc)},{p:midpoint(c,a),v:cross(n,scale(ac,-1))},{p:midpoint(a,b),v:cross(n,ab)}],angleBisectors=[bisector(a,unitAB,unitAC),bisector(b,unitBA,unitBC),bisector(c,unitCA,unitCB)],eulerDirection=sub(metrics.orthocenter,circumcenter);
  return{...metrics,centers:{centroid:metrics.centroid,incenter,circumcenter,orthocenter:metrics.orthocenter},radii:{inradius,circumradius},midpoints:[midpoint(b,c),midpoint(c,a),midpoint(a,b)],medians,altitudes,perpendicularBisectors,angleBisectors,euler:eulerDirection.some(x=>Math.abs(x)>EPS)?{p:circumcenter,v:eulerDirection}:null}}
 export const lineSphereIntersections=(l:Line,c:Vec3,r:number):Vec3[]=>{const m=sub(l.p,c),aa=dot(l.v,l.v),bb=2*dot(m,l.v),cc=dot(m,m)-r*r,disc=bb*bb-4*aa*cc;if(disc<-EPS)return[];if(Math.abs(disc)<EPS)return[add(l.p,scale(l.v,-bb/(2*aa)))];const root=Math.sqrt(disc);return[add(l.p,scale(l.v,(-bb-root)/(2*aa))),add(l.p,scale(l.v,(-bb+root)/(2*aa)))]}
 export const planeSphereSection=(p:Plane,c:Vec3,r:number)=>{const distance=pointPlaneDistance(c,p);if(distance>r+EPS)return{kind:'disjoint' as const};const center=pointPlaneProjection(c,p),radius=Math.sqrt(Math.max(0,r*r-distance*distance));return{kind:radius<EPS?'tangent' as const:'circle' as const,center,radius}}
@@ -157,4 +280,3 @@ export const trianglePlaneIntersection=(a:Vec3,b:Vec3,c:Vec3,plane:Plane):{kind:
 export const triangleLineIntersection=(a:Vec3,b:Vec3,c:Vec3,l:Line):{kind:'disjoint'|'contained'|'intersect';point?:Vec3}=>{const n=cross(sub(b,a),sub(c,a));const plane:Plane={n,d:dot(n,a)};const rel=linePlaneRelation(l,plane);if(rel.kind==='contained')return{kind:'contained'};if(!rel.point)return{kind:'disjoint'};if(isPointInTriangle(rel.point,a,b,c))return{kind:'intersect',point:rel.point};return{kind:'disjoint'}}
 export const lineCircleIntersection=(l:Line,circle:Circle):{kind:'disjoint'|'tangent'|'intersect';points:Vec3[]}=>{const plane:Plane={n:circle.normal,d:dot(circle.normal,circle.center)};const rel=linePlaneRelation(l,plane);if(rel.kind==='contained'){const proj=pointLineProjection(circle.center,l),dist=distance(proj,circle.center);if(dist>circle.radius+EPS)return{kind:'disjoint',points:[]};if(Math.abs(dist-circle.radius)<=1e-4)return{kind:'tangent',points:[proj]};const half=Math.sqrt(Math.max(0,circle.radius*circle.radius-dist*dist)),u=normalize(l.v);return{kind:'intersect',points:[add(proj,scale(u,half)),sub(proj,scale(u,half))]}}if(!rel.point)return{kind:'disjoint',points:[]};const dist=distance(rel.point,circle.center);if(Math.abs(dist-circle.radius)<=1e-4)return{kind:'tangent',points:[rel.point]};return{kind:'disjoint',points:[]}}
 export const planeCircleIntersection=(p:Plane,circle:Circle):{kind:'disjoint'|'contained'|'tangent'|'intersect';points:Vec3[]}=>{const circlePlane:Plane={n:circle.normal,d:dot(circle.normal,circle.center)};const pr=planeRelation(p,circlePlane);if(pr.kind==='coincident')return{kind:'contained',points:[]};if(!pr.line)return{kind:'disjoint',points:[]};return lineCircleIntersection(pr.line,circle)}
-
