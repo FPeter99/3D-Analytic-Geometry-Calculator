@@ -1,7 +1,30 @@
+import { useEffect, useState } from 'react';
+import type { InputHTMLAttributes } from 'react';
 import type { Vec3 } from '../math/geometry';
 
 export type Language = 'en' | 'hu';
 const copy = (en: string, hu: string, l: Language) => (l === 'en' ? en : hu);
+
+export function NumericField({ value, onValueChange, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & { value: number; onValueChange: (value: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setDraft(String(value)); }, [value, focused]);
+  return <input {...props} type="text" inputMode="decimal" value={draft}
+    onFocus={(event) => { setFocused(true); props.onFocus?.(event); }}
+    onChange={(event) => {
+      const text = event.target.value;
+      setDraft(text);
+      const normalized = text.replace(',', '.');
+      if (normalized.trim() !== '' && normalized !== '-' && normalized !== '.' && normalized !== '-.' && Number.isFinite(Number(normalized))) onValueChange(Number(normalized));
+    }}
+    onBlur={(event) => {
+      setFocused(false);
+      const text = event.target.value.replace(',', '.');
+      if (text.trim() === '' || text === '-' || !Number.isFinite(Number(text))) setDraft(String(value));
+      else { onValueChange(Number(text)); setDraft(String(Number(text))); }
+      props.onBlur?.(event);
+    }} />;
+}
 
 export type PointPickVal = {
   mode: 'manual' | 'existing';
@@ -32,10 +55,9 @@ export function PointPicker({
   availablePoints,
   language,
 }: PointPickerProps) {
-  const handleCoord = (idx: 0 | 1 | 2, valStr: string) => {
-    const num = parseFloat(valStr);
+  const handleCoord = (idx: 0 | 1 | 2, num: number) => {
     const next: Vec3 = [...value.coord];
-    next[idx] = Number.isFinite(num) ? num : 0;
+    next[idx] = num;
     onChange({ ...value, coord: next, mode: 'manual', pointId: null });
   };
 
@@ -88,11 +110,10 @@ export function PointPicker({
           {(['x', 'y', 'z'] as const).map((axis, i) => (
             <label key={axis} style={{ flex: 1, margin: 0, fontSize: 10, color: 'var(--muted)' }}>
               {axis.toUpperCase()}
-              <input
-                type="number"
-                step="any"
+              <NumericField
+                aria-label={`${label} ${axis.toUpperCase()}`}
                 value={value.coord[i as 0 | 1 | 2]}
-                onChange={(e) => handleCoord(i as 0 | 1 | 2, e.target.value)}
+                onValueChange={(number) => handleCoord(i as 0 | 1 | 2, number)}
                 style={{ width: '100%', padding: '4px 6px', fontSize: 11, marginTop: 2 }}
               />
             </label>

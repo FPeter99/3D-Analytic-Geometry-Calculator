@@ -36,6 +36,7 @@ import { TriangleInspector } from "./components/TriangleInspector";
 import { SubConstructionInspector } from "./components/SubConstructionInspector";
 import {
   PointPicker,
+  NumericField,
   type PointPickVal,
   type AvailablePointItem,
 } from "./components/PointInput";
@@ -3192,7 +3193,7 @@ function App() {
               </div>
             )}
           </div>
-          <div className="section-head create-head">
+        <div className="section-head create-head">
             <span>
               {copy("CREATE OBJECT", "OBJEKTUM LÉTREHOZÁSA", language)}
             </span>
@@ -3266,9 +3267,11 @@ function App() {
           </div>
           {form && (
             <div className="form-panel">
-              <strong>
-                {copy("New", "Új", language)} {form}
-              </strong>
+              <div className="form-panel-heading">
+                <span className="form-step">01</span>
+                <div><strong>{copy("Create", "Létrehozás", language)} {kindLabel(form)}</strong><small>{copy("Enter coordinates and object properties", "Add meg a koordinátákat és az objektum adatait", language)}</small></div>
+                <button type="button" className="form-close" onClick={() => setForm(null)} aria-label={copy("Close form", "Űrlap bezárása", language)}>×</button>
+              </div>
 
               {form === "point" && (
                 <PointPicker
@@ -3324,13 +3327,11 @@ function App() {
                         {(["x", "y", "z"] as const).map((axis, i) => (
                           <label key={axis} style={{ flex: 1, margin: 0, fontSize: 10, color: "var(--muted)" }}>
                             {axis.toUpperCase()}
-                            <input
-                              type="number"
-                              step="any"
+                            <NumericField
                               value={formDirVec[i]}
-                              onChange={(e) => {
+                              onValueChange={(value) => {
                                 const v = [...formDirVec] as Vec3;
-                                v[i] = parseFloat(e.target.value) || 0;
+                                v[i] = value;
                                 setFormDirVec(v);
                               }}
                               style={{ width: "100%", padding: "4px 6px", fontSize: 11, marginTop: 2 }}
@@ -3406,13 +3407,11 @@ function App() {
                         {(["x", "y", "z"] as const).map((axis, i) => (
                           <label key={axis} style={{ flex: 1, margin: 0, fontSize: 10, color: "var(--muted)" }}>
                             {axis.toUpperCase()}
-                            <input
-                              type="number"
-                              step="any"
+                            <NumericField
                               value={formDirVec[i]}
-                              onChange={(e) => {
+                              onValueChange={(value) => {
                                 const v = [...formDirVec] as Vec3;
-                                v[i] = parseFloat(e.target.value) || 0;
+                                v[i] = value;
                                 setFormDirVec(v);
                               }}
                               style={{ width: "100%", padding: "4px 6px", fontSize: 11, marginTop: 2 }}
@@ -3504,13 +3503,11 @@ function App() {
                         {(["x", "y", "z"] as const).map((axis, i) => (
                           <label key={axis} style={{ flex: 1, margin: 0, fontSize: 10, color: "var(--muted)" }}>
                             {axis.toUpperCase()}
-                            <input
-                              type="number"
-                              step="any"
+                            <NumericField
                               value={formNormalVec[i]}
-                              onChange={(e) => {
+                              onValueChange={(value) => {
                                 const v = [...formNormalVec] as Vec3;
-                                v[i] = parseFloat(e.target.value) || 0;
+                                v[i] = value;
                                 setFormNormalVec(v);
                               }}
                               style={{ width: "100%", padding: "4px 6px", fontSize: 11, marginTop: 2 }}
@@ -3534,12 +3531,9 @@ function App() {
                   />
                   <label>
                     {copy("Radius (R)", "Sugár (R)", language)}
-                    <input
-                      type="number"
-                      min="0.001"
-                      step="any"
+                    <NumericField
                       value={formRadius}
-                      onChange={(e) => setFormRadius(parseFloat(e.target.value) || 1)}
+                      onValueChange={setFormRadius}
                     />
                   </label>
                 </>
@@ -3556,12 +3550,9 @@ function App() {
                   />
                   <label>
                     {copy("Radius (R)", "Sugár (R)", language)}
-                    <input
-                      type="number"
-                      min="0.001"
-                      step="any"
+                    <NumericField
                       value={formRadius}
-                      onChange={(e) => setFormRadius(parseFloat(e.target.value) || 1)}
+                      onValueChange={setFormRadius}
                     />
                   </label>
                   <div className="point-input-group">
@@ -3572,13 +3563,11 @@ function App() {
                       {(["x", "y", "z"] as const).map((axis, i) => (
                         <label key={axis} style={{ flex: 1, margin: 0, fontSize: 10, color: "var(--muted)" }}>
                           {axis.toUpperCase()}
-                          <input
-                            type="number"
-                            step="any"
+                          <NumericField
                             value={formNormalVec[i]}
-                            onChange={(e) => {
+                            onValueChange={(value) => {
                               const v = [...formNormalVec] as Vec3;
-                              v[i] = parseFloat(e.target.value) || 0;
+                              v[i] = value;
                               setFormNormalVec(v);
                             }}
                             style={{ width: "100%", padding: "4px 6px", fontSize: 11, marginTop: 2 }}
