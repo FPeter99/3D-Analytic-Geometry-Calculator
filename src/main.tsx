@@ -49,7 +49,7 @@ import { calculate } from "./math/calculator";
 import { CurveInspector } from "./components/CurveInspector";
 import tergeoPreset from "./tergeo.json";
 import "./style.css";
-type Kind =
+type FormKind =
   | "point"
   | "vector"
   | "segment"
@@ -58,7 +58,12 @@ type Kind =
   | "triangle"
   | "sphere"
   | "circle"
-  | "curve";
+  | "parabola"
+  | "ellipse"
+  | "helix"
+  | "spiral"
+  | "bezier";
+type Kind = "point" | "vector" | "segment" | "line" | "plane" | "triangle" | "sphere" | "circle" | "curve";
 type Obj = {
   id: string;
   name: string;
@@ -80,7 +85,7 @@ type State = { objects: Obj[]; selected: string | null };
 type Language = "en" | "hu";
 const copy = (en: string, hu: string, l: Language) => (l === "en" ? en : hu),
   uid = () => Math.random().toString(36).slice(2, 9),
-  colors: Record<Kind, string> = {
+  colors: Record<FormKind | Kind, string> = {
     point: "#f2b84b",
     vector: "#55d6be",
     segment: "#9d8cff",
@@ -90,6 +95,11 @@ const copy = (en: string, hu: string, l: Language) => (l === "en" ? en : hu),
     sphere: "#ff8b65",
     circle: "#54d2e8",
     curve: "#a78bfa",
+    parabola: "#a78bfa",
+    ellipse: "#c084fc",
+    helix: "#e879f9",
+    spiral: "#f472b6",
+    bezier: "#818cf8",
   },
   vec = (a: any): Vec3 => [+a[0] || 0, +a[1] || 0, +a[2] || 0],
   fmt = (n: number, p = currentPrecision) => Number(n.toFixed(p)).toString(),
@@ -377,7 +387,7 @@ function App() {
       return [{ id: "sheet-1", name: "Munkalap 1", state: (() => { try { const s = localStorage.getItem("tergeo-session"); return s ? JSON.parse(s) : seed; } catch { return seed; } })() }];
     }),
     [activeWorksheetId, setActiveWorksheetId] = useState(() => localStorage.getItem("tergeo-active-worksheet") || "sheet-1"),
-    [form, setForm] = useState<Kind | null>(null),
+    [form, setForm] = useState<FormKind | null>(null),
     [theme, setTheme] = useState<"dark" | "light">("dark"),
     [showGrid, setShowGrid] = useState(true),
     [showAxes, setShowAxes] = useState(true),
@@ -1073,12 +1083,53 @@ function App() {
       notify(copy("Centroid created", "Súlypont létrehozva", language));
     }
   };
-  const openForm = (k: Kind) => {
+  const openForm = (k: FormKind) => {
     if (form === k) {
       setForm(null);
       return;
     }
     setForm(k);
+    if (k === "parabola") {
+      setCurveKind("parabola");
+      setCurveCenter([0, 0, 0]);
+      setCurveVec1([0, 1, 0]);
+      setCurveVec2([1, 0, 0]);
+      setCurveNum1(1);
+      setCurveTMin(-3);
+      setCurveTMax(3);
+    } else if (k === "ellipse") {
+      setCurveKind("ellipse");
+      setCurveCenter([0, 0, 0]);
+      setCurveVec1([3, 0, 0]);
+      setCurveVec2([0, 2, 0]);
+      setCurveTMin(0);
+      setCurveTMax(6.283);
+    } else if (k === "helix") {
+      setCurveKind("helix");
+      setCurveCenter([0, 0, 0]);
+      setCurveVec1([0, 0, 1]);
+      setCurveNum1(2);
+      setCurveNum2(2);
+      setCurveTMin(0);
+      setCurveTMax(18.85);
+    } else if (k === "spiral") {
+      setCurveKind("spiral");
+      setCurveCenter([0, 0, 0]);
+      setCurveVec1([0, 0, 1]);
+      setCurveNum1(0.5);
+      setCurveNum2(0.2);
+      setCurvePitch("2");
+      setCurveTMin(0);
+      setCurveTMax(18.85);
+    } else if (k === "bezier") {
+      setCurveKind("cubic-bezier");
+      setCurveCenter([-2, 0, 0]);
+      setCurveVec1([-1, 3, 1]);
+      setCurveVec2([1, -3, 1]);
+      setCurveVec3([2, 0, 0]);
+      setCurveTMin(0);
+      setCurveTMax(1);
+    }
     const pts = selectedPoints;
     if (pts.length >= 1) {
       setFormPt1({
@@ -1222,6 +1273,16 @@ function App() {
           return copy("sphere", "gömb", language);
         case "curve":
           return copy("3D curve", "3D görbe", language);
+        case "parabola":
+          return copy("3D parabola", "3D parabola", language);
+        case "ellipse":
+          return copy("3D ellipse", "3D ellipszis", language);
+        case "helix":
+          return copy("3D helix", "3D csavarvonal", language);
+        case "spiral":
+          return copy("3D spiral", "3D spirál", language);
+        case "bezier":
+          return copy("3D Bézier curve", "3D Bézier-görbe", language);
         case "circle":
           return copy("circle", "kör", language);
         default:
@@ -3289,9 +3350,13 @@ function App() {
                 "plane",
                 "triangle",
                 "circle",
-                "curve",
+                "parabola",
+                "ellipse",
+                "helix",
+                "spiral",
+                "bezier",
                 "sphere",
-              ] as Kind[]
+              ] as FormKind[]
             ).map((k) => (
               <button
                 key={k}
@@ -3311,7 +3376,19 @@ function App() {
                             ? "▱"
                             : k === "triangle"
                               ? "△"
-                              : "◯"}
+                              : k === "circle"
+                                ? "◯"
+                                : k === "parabola"
+                                  ? "🪃"
+                                  : k === "ellipse"
+                                    ? "⬭"
+                                    : k === "helix"
+                                      ? "🌀"
+                                      : k === "spiral"
+                                        ? "🌪️"
+                                        : k === "bezier"
+                                          ? "〰️"
+                                          : "◯"}
                 </span>
                 {copy(
                   k === "point"
@@ -3328,7 +3405,17 @@ function App() {
                               ? "Triangle"
                               : k === "circle"
                                 ? "Circle"
-                                : k === "curve" ? "Parametric curve" : "Sphere",
+                                : k === "parabola"
+                                  ? "3D Parabola"
+                                  : k === "ellipse"
+                                    ? "3D Ellipse"
+                                    : k === "helix"
+                                      ? "3D Helix"
+                                      : k === "spiral"
+                                        ? "3D Spiral"
+                                        : k === "bezier"
+                                          ? "3D Bézier"
+                                          : "Sphere",
                   k === "point"
                     ? "Pont"
                     : k === "vector"
@@ -3341,7 +3428,19 @@ function App() {
                             ? "Sík"
                             : k === "triangle"
                               ? "Háromszög"
-                              : k === "curve" ? "Paraméteres görbe" : "Gömb",
+                              : k === "circle"
+                                ? "Kör"
+                                : k === "parabola"
+                                  ? "3D Parabola"
+                                  : k === "ellipse"
+                                    ? "3D Ellipszis"
+                                    : k === "helix"
+                                      ? "3D Csavarvonal"
+                                      : k === "spiral"
+                                        ? "3D Spirál"
+                                        : k === "bezier"
+                                          ? "3D Bézier"
+                                          : "Gömb",
                   language,
                 )}
               </button>
@@ -3364,66 +3463,8 @@ function App() {
                   language={language}
                 />
               )}
-              {form === "curve" && (
+              {(["parabola", "ellipse", "helix", "spiral", "bezier"] as FormKind[]).includes(form as any) && (
                 <div className="workspace-form curve-form">
-                  <label>
-                    {copy("3D Curve Type", "3D Görbetípus", language)}
-                    <select
-                      value={curveKind}
-                      onChange={(e) => {
-                        const k = e.target.value as G.ParametricCurve["kind"];
-                        setCurveKind(k);
-                        if (k === "parabola") {
-                          setCurveCenter([0, 0, 0]);
-                          setCurveVec1([0, 1, 0]);
-                          setCurveVec2([1, 0, 0]);
-                          setCurveNum1(1);
-                          setCurveTMin(-3);
-                          setCurveTMax(3);
-                        } else if (k === "ellipse") {
-                          setCurveCenter([0, 0, 0]);
-                          setCurveVec1([3, 0, 0]);
-                          setCurveVec2([0, 2, 0]);
-                          setCurveTMin(0);
-                          setCurveTMax(6.283);
-                        } else if (k === "helix") {
-                          setCurveCenter([0, 0, 0]);
-                          setCurveVec1([0, 0, 1]);
-                          setCurveNum1(2);
-                          setCurveNum2(2);
-                          setCurveTMin(0);
-                          setCurveTMax(18.85);
-                        } else if (k === "spiral") {
-                          setCurveCenter([0, 0, 0]);
-                          setCurveVec1([0, 0, 1]);
-                          setCurveNum1(0.5);
-                          setCurveNum2(0.2);
-                          setCurvePitch("2");
-                          setCurveTMin(0);
-                          setCurveTMax(18.85);
-                        } else if (k === "line") {
-                          setCurveCenter([-2, 0, 0]);
-                          setCurveVec1([2, 0, 0]);
-                          setCurveTMin(0);
-                          setCurveTMax(1);
-                        } else if (k === "cubic-bezier") {
-                          setCurveCenter([-2, 0, 0]);
-                          setCurveVec1([-1, 3, 1]);
-                          setCurveVec2([1, -3, 1]);
-                          setCurveVec3([2, 0, 0]);
-                          setCurveTMin(0);
-                          setCurveTMax(1);
-                        }
-                      }}
-                    >
-                      <option value="parabola">{copy("3D Parabola", "3D Parabola", language)}</option>
-                      <option value="ellipse">{copy("3D Ellipse", "3D Ellipszis", language)}</option>
-                      <option value="helix">{copy("3D Helix", "3D Csavarvonal", language)}</option>
-                      <option value="spiral">{copy("3D Spiral", "3D Spirál", language)}</option>
-                      <option value="cubic-bezier">{copy("3D Cubic Bézier", "3D Bézier-görbe", language)}</option>
-                      <option value="line">{copy("3D Line Segment", "3D Egyenes szakasz", language)}</option>
-                    </select>
-                  </label>
 
                   {curveKind === "parabola" && (
                     <>
